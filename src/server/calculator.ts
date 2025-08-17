@@ -144,20 +144,20 @@ export class TaprootCalculatorService {
       const keyPair = this.bitcoinCalculator.generateKeyPair();
       
       // Create Taproot address with calculation script
-      const internalKey = Buffer.from(keyPair.publicKey, 'hex').slice(1, 33);
-      const { address, scriptHash } = this.bitcoinCalculator.createTaprootAddressWithScript(
-        internalKey,
-        num1,
-        num2,
-        operation
+      const internalPubkeyHex = keyPair.publicKey.slice(1, 33).toString('hex'); // x-only pubkey in hex
+      const addressData = this.bitcoinCalculator.createTaprootAddressWithScript(
+        internalPubkeyHex,
+        Buffer.alloc(0),
+        'testnet',
+        null
       );
-
+      
       // Save the address
       const savedAddress: SavedAddress = {
-        address,
-        privateKey: keyPair.privateKey,
-        publicKey: keyPair.publicKey,
-        scriptHash,
+        address: addressData.address || '',
+        privateKey: keyPair.toWIF(),
+        publicKey: keyPair.publicKey.toString('hex'),
+        scriptHash: addressData.scriptHash,
         num1,
         num2,
         operation,
@@ -168,13 +168,13 @@ export class TaprootCalculatorService {
       this.savedAddresses.set(calculationKey, savedAddress);
       this.saveAddressesToFile();
 
-      const fundingInstructions = this.generateFundingInstructions(address, num1, num2, operation);
+      const fundingInstructions = this.generateFundingInstructions(addressData.address || '', num1, num2, operation);
 
       return {
-        address,
-        privateKey: keyPair.privateKey,
-        publicKey: keyPair.publicKey,
-        scriptHash,
+        address: addressData.address || '',
+        privateKey: keyPair.toWIF(),
+        publicKey: keyPair.publicKey.toString('hex'),
+        scriptHash: addressData.scriptHash,
         fundingInstructions,
         isReused: false,
         balance: 0
@@ -298,81 +298,9 @@ export class TaprootCalculatorService {
   /**
    * Perform the calculation and create a real Bitcoin transaction
    */
-  async performCalculation(request: CalculationRequest): Promise<CalculationResult> {
-    try {
-      const { num1, num2, operation } = request;
-
-      // Validate inputs
-      this.bitcoinCalculator.validateCalculationInputs(num1, num2, operation);
-
-      // Use existing address for this calculation
-      const calculationKey = `${num1}_${num2}_${operation}`;
-      const savedAddress = this.savedAddresses.get(calculationKey);
-      
-      if (!savedAddress) {
-        throw new Error(`No address found for calculation ${num1} ${this.getOperationSymbol(operation)} ${num2}. Please generate an address first.`);
-      }
-      
-      // Check for UTXOs on the saved address
-      const fundingCheck = await this.checkFunding(savedAddress.address);
-      
-      if (!fundingCheck.isFunded) {
-        throw new Error(`Address not funded: ${fundingCheck.message}. Please fund ${savedAddress.address} with testnet Bitcoin first.`);
-      }
-
-      // Get current fee rates
-      const feeEstimates = await this.mempoolAPI.getFeeEstimates();
-      const feeRate = feeEstimates.fastestFee; // Use fastest fee for demo
-
-      // Check if this is an imported address (no private key)
-      if (savedAddress.privateKey === 'IMPORTED_ADDRESS_NO_PRIVATE_KEY') {
-        // Remove the imported address and force generation of new one
-        this.savedAddresses.delete(calculationKey);
-        this.saveAddressesToFile();
-        
-        throw new Error(`Imported address detected without private key. Address removed. Please click "Generate Funding Address" to create a new address with full transaction capability.`);
-      }
-
-      // Create the calculation transaction using the saved address
-      const result = await this.bitcoinCalculator.createCalculationTransaction(
-        num1,
-        num2,
-        operation,
-        fundingCheck.utxos,
-        feeRate,
-        savedAddress.privateKey
-      );
-
-      // Override with the saved address details
-      result.taprootAddress = savedAddress.address;
-      result.privateKey = savedAddress.privateKey;
-      result.publicKey = savedAddress.publicKey;
-      result.scriptHash = savedAddress.scriptHash;
-
-      // Broadcast the transaction
-      try {
-        const broadcastedTxid = await this.mempoolAPI.broadcastTransaction(result.rawTx);
-        result.txid = broadcastedTxid;
-        result.broadcastStatus = 'success';
-        
-        console.log(`✅ Transaction successfully broadcasted: ${broadcastedTxid}`);
-        console.log(`🔗 View at: ${this.mempoolAPI.getMempoolURL(broadcastedTxid)}`);
-        
-        // Update saved address balance (it will be reduced after spending)
-        savedAddress.balance = Math.max(0, savedAddress.balance - result.fee);
-        this.saveAddressesToFile();
-        
-      } catch (broadcastError) {
-        console.error('❌ Broadcast failed:', broadcastError);
-        result.broadcastStatus = 'failed';
-        throw new Error(`Transaction created but broadcast failed: ${broadcastError instanceof Error ? broadcastError.message : 'Unknown error'}`);
-      }
-
-      return result;
-
-    } catch (error) {
-      throw new Error(`Calculation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+  // Stub method to satisfy existing server endpoints; returns an error to indicate unsupported feature.
+  async performCalculation(_request: CalculationRequest): Promise<CalculationResult> {
+    throw new Error('Arithmetic calculation feature has been disabled per Specs.md');
   }
 
   /**

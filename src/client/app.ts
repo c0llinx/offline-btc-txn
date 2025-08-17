@@ -1,655 +1,449 @@
-import { CalculationRequest, CalculationResult, Operation } from '../shared/types.js';
+import QRCode from 'qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
 
-interface AppState {
-  num1: number;
-  num2: number;
-  operation: Operation | null;
-  isCalculating: boolean;
-  currentAddress: string | null;
-  fundingStatus: 'checking' | 'funded' | 'unfunded' | 'error';
-  lastResult: CalculationResult | null;
-  error: string | null;
+interface OfflineTxoData {
+  txid: string;
+  vout: number;
+  value: number;
+  taprootAddress: string;
+  senderPublicKey: string;
+  refundTimeLock: number;
 }
 
-class RealBitcoinCalculatorApp {
-  private state: AppState;
-  private apiBaseUrl: string;
+interface SenderData extends OfflineTxoData {
+  preimage: string;
+}
+
+type WorkflowTab = 'sender' | 'receiver' | 'refund';
+
+class OfflineBtcApp {
+  // --- UI Elements ---
+  private tabSender: HTMLElement;
+  private tabReceiver: HTMLElement;
+  private tabRefund: HTMLElement;
+  private sectionSender: HTMLElement;
+  private sectionReceiver: HTMLElement;
+  private sectionRefund: HTMLElement;
+  private qrCodeA: HTMLElement;
+  private qrCodeB: HTMLElement;
+  private senderResults: HTMLElement;
+  private receiverScannerDiv: HTMLElement;
+  private receiverForm: HTMLFormElement;
+  private refundScannerDiv: HTMLElement;
+  private refundForm: HTMLFormElement;
+  private loadingDiv: HTMLElement;
+  private errorDiv: HTMLElement;
+  private generateSenderBtn: HTMLElement;
+  private senderWifInput: HTMLInputElement;
+  private generateReceiverBtn: HTMLElement;
+  private receiverWifInput: HTMLInputElement;
+  private receiverGeneratedDiv: HTMLElement;
+  // Clipboard buttons
+  private pasteTxBtn: HTMLElement;
+  private pasteSecretBtn: HTMLElement;
+  private toastDiv: HTMLElement;
+
+  // --- State ---
+  private activeTab: WorkflowTab = 'sender';
+  private scannedTxoData: OfflineTxoData | null = null;
+  private scannedPreimage: string | null = null;
+  private receiverScanner: Html5Qrcode | null = null;
+  private refundScanner: Html5Qrcode | null = null;
 
   constructor() {
-    this.state = {
-      num1: 10,
-      num2: 5,
-      operation: null,
-      isCalculating: false,
-      currentAddress: null,
-      fundingStatus: 'checking',
-      lastResult: null,
-      error: null
-    };
+    // Get UI elements
+    this.tabSender = document.getElementById('tab-sender')!;
+    this.tabReceiver = document.getElementById('tab-receiver')!;
+    this.tabRefund = document.getElementById('tab-refund')!;
+    this.sectionSender = document.getElementById('section-sender')!;
+    this.sectionReceiver = document.getElementById('section-receiver')!;
+    this.sectionRefund = document.getElementById('section-refund')!;
+    this.qrCodeA = document.getElementById('qrcode-a')!;
+    this.qrCodeB = document.getElementById('qrcode-b')!;
+    this.senderResults = document.getElementById('sender-results')!;
+    this.receiverScannerDiv = document.getElementById('receiver-scanner-div')!;
+    this.receiverForm = document.getElementById('receiver-form') as HTMLFormElement;
+    this.refundScannerDiv = document.getElementById('refund-scanner-div')!;
+    this.refundForm = document.getElementById('refund-form') as HTMLFormElement;
+    this.loadingDiv = document.getElementById('loading')!;
+    this.errorDiv = document.getElementById('error')!;
 
-    this.apiBaseUrl = '/api';
-    this.initializeEventListeners();
-    this.checkNetworkStatus();
-  }
+    // Key generation elements
+    this.generateSenderBtn = document.getElementById('generate-sender-wif-btn')!;
+    this.senderWifInput = document.getElementById('sender-wif-input') as HTMLInputElement;
+    this.generateReceiverBtn = document.getElementById('generate-receiver-wif-btn')!;
+    this.receiverWifInput = document.getElementById('receiver-wif-input') as HTMLInputElement;
+    this.receiverGeneratedDiv = document.getElementById('receiver-generated-address')!;
+    this.pasteTxBtn = document.getElementById('paste-tx-btn')!;
+    this.pasteSecretBtn = document.getElementById('paste-secret-btn')!;
+    this.toastDiv = document.getElementById('toast')!;
+    this.pasteTxBtn.addEventListener('click', () => this.handlePasteTx());
+    this.pasteSecretBtn.addEventListener('click', () => this.handlePasteSecret());
 
-  private initializeEventListeners(): void {
-    console.log('🔧 Initializing Real Bitcoin Calculator...');
+    // Tab switching
+    this.tabSender.addEventListener('click', () => this.switchTab('sender'));
+    this.tabReceiver.addEventListener('click', () => this.switchTab('receiver'));
+    this.tabRefund.addEventListener('click', () => this.switchTab('refund'));
 
-    // Operation buttons
-    document.querySelectorAll('.op-btn').forEach(button => {
-      button.addEventListener('click', (e) => {
-        const target = e.target as HTMLButtonElement;
-        const operation = target.dataset.op as Operation;
-        this.selectOperation(operation);
-      });
-    });
+    // Sender form
+    document.getElementById('sender-form')!.addEventListener('submit', e => this.handleSenderSubmit(e));
+    // Receiver scan
+    document.getElementById('start-receiver-scan-btn')!.addEventListener('click', () => this.startReceiverScanner());
+    this.receiverForm.addEventListener('submit', e => this.handleReceiverSubmit(e));
+    // Refund scan
+    document.getElementById('start-refund-scan-btn')!.addEventListener('click', () => this.startRefundScanner());
+    this.refundForm.addEventListener('submit', e => this.handleRefundSubmit(e));
 
-    // Calculate button
-    const calculateButton = document.getElementById('calculateBtn') as HTMLButtonElement;
-    if (calculateButton) {
-      calculateButton.addEventListener('click', () => {
-        this.performCalculation();
-      });
-    }
+    // Key generation handlers
+    this.generateSenderBtn.addEventListener('click', () => this.handleGenerateSender());
+    this.generateReceiverBtn.addEventListener('click', () => this.handleGenerateReceiver());
 
-    // Generate address button
-    const generateAddressBtn = document.getElementById('generateAddressBtn') as HTMLButtonElement;
-    if (generateAddressBtn) {
-      generateAddressBtn.addEventListener('click', () => {
-        this.generateFundingAddress();
-      });
-    }
-
-    // Check funding button
-    const checkFundingBtn = document.getElementById('checkFundingBtn') as HTMLButtonElement;
-    if (checkFundingBtn) {
-      checkFundingBtn.addEventListener('click', () => {
-        this.checkFunding();
-      });
-    }
-
-    // Input fields
-    const num1Input = document.getElementById('num1') as HTMLInputElement;
-    const num2Input = document.getElementById('num2') as HTMLInputElement;
-
-    if (num1Input) {
-      num1Input.addEventListener('input', () => {
-        this.state.num1 = parseFloat(num1Input.value) || 0;
-        this.validateInputs();
-        this.loadSavedAddresses(); // Only refresh display, don't auto-select
-      });
-      this.state.num1 = parseFloat(num1Input.value) || 0;
-    }
-
-    if (num2Input) {
-      num2Input.addEventListener('input', () => {
-        this.state.num2 = parseFloat(num2Input.value) || 0;
-        this.validateInputs();
-        this.loadSavedAddresses(); // Only refresh display, don't auto-select
-      });
-      this.state.num2 = parseFloat(num2Input.value) || 0;
-    }
-
-    // Load saved addresses on startup
-    this.loadSavedAddresses();
-
-    console.log('✅ Real Bitcoin Calculator initialized');
-  }
-
-  private selectOperation(operation: Operation): void {
-    console.log('Operation selected:', operation);
-    this.state.operation = operation;
-
-    // Update UI
-    document.querySelectorAll('.op-btn').forEach(button => {
-      button.classList.remove('selected');
-    });
-
-    const selectedButton = document.querySelector(`[data-op="${operation}"]`);
-    if (selectedButton) {
-      selectedButton.classList.add('selected');
-    }
-
-    this.validateInputs();
+    // Hide all errors/loading on start
+    this.hideLoading();
     this.clearError();
-
-    // Only refresh the display of saved addresses, don't auto-select
-    this.loadSavedAddresses();
+    this.switchTab('sender');
   }
 
-  private async loadSavedAddresses(): Promise<void> {
+  private switchTab(tab: WorkflowTab) {
+    this.activeTab = tab;
+    this.sectionSender.style.display = tab === 'sender' ? 'block' : 'none';
+    this.sectionReceiver.style.display = tab === 'receiver' ? 'block' : 'none';
+    this.sectionRefund.style.display = tab === 'refund' ? 'block' : 'none';
+    // (Tab highlight logic omitted for brevity)
+  }
+
+  // --- Sender Workflow ---
+  private async handleSenderSubmit(e: Event) {
+    e.preventDefault();
+    this.hideError();
+    this.showLoading('Creating sender transaction...');
     try {
-      const response = await fetch(`${this.apiBaseUrl}/saved-addresses`);
-      if (!response.ok) return;
-
-      const savedAddresses = await response.json();
-      this.displaySavedAddresses(savedAddresses);
-    } catch (error) {
-      console.warn('Failed to load saved addresses:', error);
-    }
-  }
-
-  private displaySavedAddresses(addresses: any[]): void {
-    const savedAddressesSection = document.getElementById('saved-addresses-section') as HTMLElement;
-    const savedAddressesList = document.getElementById('saved-addresses-list') as HTMLElement;
-
-    if (!savedAddressesList) return;
-
-    if (addresses.length === 0) {
-      savedAddressesList.innerHTML = '<p style="text-align: center; color: #666;">No saved addresses yet. Generate an address first.</p>';
-      savedAddressesSection.style.display = 'block';
-      return;
-    }
-
-    // Identify current calculation for highlighting (but not auto-selecting)
-    const currentCalculationKey = this.state.operation ? 
-      `${this.state.num1}_${this.state.num2}_${this.state.operation}` : null;
-
-    // Check if we have a currently selected address
-    const selectedAddress = this.state.currentAddress;
-
-    let html = '';
-    
-    addresses.forEach(addr => {
-      const isSelected = addr.address === selectedAddress;
-      const balanceClass = addr.balance > 0 ? 'funded' : 'unfunded';
-      const balanceText = addr.balance > 0 ? `${addr.balance} sats` : 'Unfunded';
-      
-      // Only show as selected if explicitly selected
-      let itemClass = 'saved-address-item';
-      if (isSelected) {
-        itemClass += ' selected';
-      }
-      
-      let statusText = '';
-      if (isSelected) {
-        statusText = '(Selected)';
-      }
-      
-      // Display calculations history
-      let calculationsDisplay = '';
-      if (addr.calculations && addr.calculations.length > 0) {
-        calculationsDisplay = addr.calculations.map((calc: any) => {
-          const operationSymbol = this.getOperationSymbol(calc.operation);
-          return `${calc.num1} ${operationSymbol} ${calc.num2} = ${calc.result}`;
-        }).join(', ');
-      } else {
-        calculationsDisplay = 'No calculations yet';
-      }
-      
-      html += `
-        <div class="${itemClass}" 
-             data-address="${addr.address}"
-             onclick="window.calculator.selectSavedAddress('${addr.address}')">
-          <div class="saved-address-header">
-            <div class="saved-address-calculation">
-              ${calculationsDisplay}
-              ${statusText}
-            </div>
-            <div class="saved-address-balance ${balanceClass}">
-              ${balanceText}
-            </div>
-          </div>
-          <div class="saved-address-details">
-            ${addr.address.slice(0, 20)}...${addr.address.slice(-20)}
-          </div>
-        </div>
-      `;
-    });
-
-    savedAddressesList.innerHTML = html;
-    savedAddressesSection.style.display = 'block';
-  }
-
-  public async selectSavedAddress(address: string): Promise<void> {
-    try {
-      // Just select the address for reuse without changing the current calculation
-      this.state.currentAddress = address;
-      
-      // Update visual selection
-      document.querySelectorAll('.saved-address-item').forEach(item => {
-        item.classList.remove('selected');
-      });
-      
-      const selectedItem = document.querySelector(`[data-address="${address}"]`);
-      if (selectedItem) {
-        selectedItem.classList.add('selected');
-      }
-      
-      // Show funding section with selected address info
-      const fundingSection = document.getElementById('funding-section');
-      const addressDisplay = document.getElementById('funding-address');
-      
-      if (fundingSection && addressDisplay) {
-        addressDisplay.textContent = address;
-        fundingSection.style.display = 'block';
-        
-        // Update balance display if available
-        const response = await fetch(`${this.apiBaseUrl}/saved-addresses`);
-        if (response.ok) {
-          const addresses = await response.json();
-          const selectedAddr = addresses.find((addr: any) => addr.address === address);
-          if (selectedAddr) {
-            const balanceElement = document.querySelector('.address-balance');
-            if (balanceElement) {
-              balanceElement.textContent = selectedAddr.balance > 0 ? 
-                `✅ Funded with ${selectedAddr.balance} sats` : '❌ Not funded';
-            }
-          }
-        }
-      }
-      
-      console.log(`Selected address: ${address} for reuse with new calculations`);
-    } catch (error) {
-      this.showError(`Failed to select address: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  private symbolToOperation(symbol: string): Operation {
-    switch (symbol) {
-      case '+': return 'add';
-      case '-': return 'subtract';
-      case '×': return 'multiply';
-      case '÷': return 'divide';
-      default: return 'add';
-    }
-  }
-
-  private getOperationSymbol(operation: string): string {
-    switch (operation) {
-      case 'add': return '+';
-      case 'subtract': return '-';
-      case 'multiply': return '×';
-      case 'divide': return '÷';
-      default: return '?';
-    }
-  }
-
-  private calculateResult(num1: number, num2: number, operation: string): number {
-    switch (operation) {
-      case 'add': return num1 + num2;
-      case 'subtract': return num1 - num2;
-      case 'multiply': return num1 * num2;
-      case 'divide': return Math.floor(num1 / num2);
-      default: return 0;
-    }
-  }
-
-  private displayAddressInfo(addressInfo: any): void {
-    const fundingAddress = document.getElementById('funding-address') as HTMLElement;
-    const fundingSection = document.getElementById('funding-section') as HTMLElement;
-
-    if (fundingAddress) {
-      fundingAddress.textContent = addressInfo.address;
-    }
-
-    if (fundingSection) {
-      fundingSection.style.display = 'block';
-    }
-  }
-
-  private validateInputs(): boolean {
-    const { num1, num2, operation } = this.state;
-    
-    if (!operation) {
-      this.updateCalculateButton(false, 'Select an operation first');
-      return false;
-    }
-
-    if (isNaN(num1) || isNaN(num2)) {
-      this.updateCalculateButton(false, 'Enter valid numbers');
-      return false;
-    }
-
-    if (!Number.isInteger(num1) || !Number.isInteger(num2)) {
-      this.updateCalculateButton(false, 'Only integers are supported');
-      return false;
-    }
-
-    if (operation === 'divide' && num2 === 0) {
-      this.updateCalculateButton(false, 'Division by zero not allowed');
-      return false;
-    }
-
-    // Check for overflow
-    const MAX_SCRIPT_NUM = 2147483647;
-    const MIN_SCRIPT_NUM = -2147483648;
-
-    if (num1 < MIN_SCRIPT_NUM || num1 > MAX_SCRIPT_NUM || 
-        num2 < MIN_SCRIPT_NUM || num2 > MAX_SCRIPT_NUM) {
-      this.updateCalculateButton(false, 'Numbers must be 32-bit signed integers');
-      return false;
-    }
-
-    // Check result overflow
-    let result: number;
-    switch (operation) {
-      case 'add': result = num1 + num2; break;
-      case 'subtract': result = num1 - num2; break;
-      case 'multiply': result = num1 * num2; break;
-      case 'divide': result = Math.floor(num1 / num2); break;
-    }
-
-    if (result < MIN_SCRIPT_NUM || result > MAX_SCRIPT_NUM) {
-      this.updateCalculateButton(false, 'Result would overflow 32-bit range');
-      return false;
-    }
-
-    this.updateCalculateButton(true);
-    return true;
-  }
-
-  private updateCalculateButton(enabled: boolean, message?: string): void {
-    const calculateButton = document.getElementById('calculateBtn') as HTMLButtonElement;
-    const statusText = document.getElementById('calculation-status') as HTMLElement;
-    
-    if (calculateButton) {
-      calculateButton.disabled = !enabled || this.state.isCalculating;
-    }
-
-    if (statusText) {
-      statusText.textContent = message || '';
-      statusText.style.display = message ? 'block' : 'none';
-    }
-  }
-
-  private async generateFundingAddress(): Promise<void> {
-    const { num1, num2, operation } = this.state;
-    
-    if (!operation || !this.validateInputs()) {
-      return;
-    }
-
-    try {
-      this.showLoading('Generating Bitcoin address...');
-      
-      const response = await fetch(`${this.apiBaseUrl}/generate-address`, {
+      const formData = new FormData(e.target as HTMLFormElement);
+      const senderWif = formData.get('sender-wif') as string;
+      const receiverAddress = formData.get('receiver-address') as string;
+      const amount = Number(formData.get('amount'));
+      const refundLocktime = Number(formData.get('refund-locktime'));
+      const resp = await fetch('/api/create-sender-transaction', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ num1, num2, operation })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ senderWif, receiverAddress, amount, refundLocktime })
       });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to generate address');
-      }
-
-      const result = await response.json();
-      
-      this.state.currentAddress = result.address;
-      this.displayFundingInfo(result);
-      
-      // Check funding status
-      await this.checkFunding();
-
-    } catch (error) {
-      console.error('Address generation error:', error);
-      this.showError(`Failed to generate address: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      if (!resp.ok) throw new Error((await resp.json()).message || 'Failed to create transaction');
+      const data: SenderData = await resp.json();
+      this.displaySenderResults(data);
+    } catch (err: any) {
+      this.showError(err.message || String(err));
     } finally {
       this.hideLoading();
     }
   }
 
-  private async checkFunding(): Promise<void> {
-    if (!this.state.currentAddress) {
-      return;
-    }
-
+  private displaySenderResults(data: SenderData) {
+    this.qrCodeA.innerHTML = '';
+    this.qrCodeB.innerHTML = '';
+    const canvasA = document.createElement('canvas');
+QRCode.toCanvas(canvasA, JSON.stringify(data), { width: 256 }, (error: Error | null | undefined) => {
+  if (error) throw error;
+  this.qrCodeA.appendChild(canvasA);
+});
+const canvasB = document.createElement('canvas');
+QRCode.toCanvas(canvasB, data.preimage, { width: 256 }, (error: Error | null | undefined) => {
+  if (error) throw error;
+  this.qrCodeB.appendChild(canvasB);
+});
+      const copyTxBtn = document.createElement('button');
+  copyTxBtn.textContent = 'Copy Tx Data';
+  copyTxBtn.className = 'btn btn-secondary';
+  copyTxBtn.style.marginTop = '10px';
+  copyTxBtn.addEventListener('click', async () => {
     try {
-      this.state.fundingStatus = 'checking';
-      this.updateFundingStatus('Checking funding status...');
+      const ok = await this.copyToClipboard(JSON.stringify(data));
+      this.showToast(ok ? 'Tx data copied to clipboard' : 'Failed to copy', ok);
+    } catch {
+      this.showToast('Failed to copy', false);
+    }
+  });
+  this.qrCodeA.appendChild(copyTxBtn);
 
-      const response = await fetch(`${this.apiBaseUrl}/check-funding/${this.state.currentAddress}`);
-      
-      if (!response.ok) {
-        throw new Error('Failed to check funding status');
-      }
+  const copySecretBtn = document.createElement('button');
+  copySecretBtn.textContent = 'Copy Secret';
+  copySecretBtn.className = 'btn btn-secondary';
+  copySecretBtn.style.marginTop = '10px';
+  copySecretBtn.style.marginLeft = '10px';
+  copySecretBtn.addEventListener('click', async () => {
+    try {
+      const ok = await this.copyToClipboard(data.preimage);
+      this.showToast(ok ? 'Secret copied to clipboard' : 'Failed to copy', ok);
+    } catch {
+      this.showToast('Failed to copy', false);
+    }
+  });
+  this.qrCodeB.appendChild(copySecretBtn);
 
-      const result = await response.json();
-      
-      if (result.isFunded) {
-        this.state.fundingStatus = 'funded';
-        this.updateFundingStatus(`✅ Funded with ${result.availableBalance} sats`, 'success');
+  this.senderResults.classList.remove('results-hidden');
+  }
+
+  // --- Receiver Workflow ---
+  private startReceiverScanner() {
+    this.receiverScanner = new Html5Qrcode('receiver-scanner');
+    this.receiverScannerDiv.innerHTML = '<p>Scan QR Code A (Transaction Data), then QR Code B (Secret).</p>';
+    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+    this.receiverScanner.start(
+  { facingMode: 'environment' },
+  config,
+  (decodedText: string, decodedResult: any) => this.handleReceiverScan(decodedText),
+  (errorMessage: string) => { /* ignore scan errors */ }
+);
+  }
+
+  private handleReceiverScan(decodedText: string) {
+    try {
+      const data = JSON.parse(decodedText) as OfflineTxoData;
+      if (data.taprootAddress && data.txid) {
+        this.scannedTxoData = data;
+        this.receiverScannerDiv.innerHTML = '<p style="color:green;">Transaction QR Code Scanned! Now scan the Secret QR Code.</p>';
+      } else throw new Error();
+    } catch {
+      if (decodedText.length === 64 && /^[0-9a-fA-F]+$/.test(decodedText)) {
+        this.scannedPreimage = decodedText;
+        this.receiverScannerDiv.innerHTML = '<p style="color:green;">Secret QR Code Scanned!</p>';
       } else {
-        this.state.fundingStatus = 'unfunded';
-        this.updateFundingStatus(`❌ ${result.message}`, 'warning');
+        this.showError('Unrecognized QR Code.');
+        return;
       }
-
-      this.updateCalculateButton(result.isFunded && this.validateInputs());
-
-    } catch (error) {
-      this.state.fundingStatus = 'error';
-      this.updateFundingStatus(`Error checking funding: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+    }
+    if (this.scannedTxoData && this.scannedPreimage) {
+      this.receiverScanner?.stop();
+      this.receiverScannerDiv.innerHTML = '<p style="color:green; font-weight: bold;">Both QR codes scanned successfully. Enter your private key to claim.</p>';
+      this.receiverForm.classList.remove('form-hidden');
     }
   }
 
-  private async performCalculation(): Promise<void> {
-    const { num1, num2, operation, currentAddress } = this.state;
-    
-    if (!operation || !this.validateInputs()) {
+  private async handleReceiverSubmit(e: Event) {
+    e.preventDefault();
+    this.hideError();
+    if (!this.scannedTxoData || !this.scannedPreimage) {
+      this.showError('Please scan both QR codes first.');
       return;
     }
-
-    // Check if we have a selected address for reuse
-    if (currentAddress) {
-      // Use existing address for new calculation
-      try {
-        this.setCalculating(true);
-        this.clearError();
-
-        const calculationRequest = { address: currentAddress, num1, num2, operation };
-
-        const response = await fetch(`${this.apiBaseUrl}/calculate-existing`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(calculationRequest)
-        });
-
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || 'Calculation with existing address failed');
-        }
-
-        const calculationResult = await response.json();
-        this.displayResults(calculationResult);
-        this.loadSavedAddresses(); // Refresh the addresses list
-        return;
-        
-      } catch (error) {
-        this.showError(error instanceof Error ? error.message : 'Calculation failed');
-        this.setCalculating(false);
-        return;
-      }
-    }
-
-    // Original logic for new address generation
-    if (this.state.fundingStatus !== 'funded') {
-      this.showError('Address must be funded before performing calculation');
-      return;
-    }
-
+    this.showLoading('Creating claim transaction...');
     try {
-      this.setCalculating(true);
-      this.clearError();
-
-      const calculationRequest: CalculationRequest = { num1, num2, operation };
-
-      const response = await fetch(`${this.apiBaseUrl}/calculate`, {
+      const formData = new FormData(this.receiverForm);
+      const receiverWif = formData.get('receiver-wif') as string;
+      const resp = await fetch('/api/create-receiver-claim-transaction', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(calculationRequest)
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ txoData: this.scannedTxoData, preimage: this.scannedPreimage, receiverWif })
       });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Calculation failed');
+      if (!resp.ok) throw new Error((await resp.json()).message || 'Failed to create claim transaction');
+      const result = await resp.json();
+      if (result.psbt) {
+        // Show success message in UI
+        this.receiverScannerDiv.innerHTML = '<p style="color:green; font-weight:bold;">Claim PSBT created and copied to clipboard.<br>Broadcast it from an online device to finalize.</p>';
+        await this.copyToClipboard(result.psbt);
+        this.showToast('Claim PSBT copied to clipboard');
+        this.receiverForm.reset();
+        // Clear scanned data to avoid duplicate claims
+        this.scannedTxoData = null;
+        this.scannedPreimage = null;
+      } else {
+        this.showToast('Claim transaction created');
+        this.receiverForm.reset();
       }
-
-      const result: CalculationResult = await response.json();
-      
-      this.state.lastResult = result;
-      this.displayResults(result);
-
-      console.log('✅ Real Bitcoin transaction created:', result.txid);
-      
-    } catch (error) {
-      console.error('Calculation error:', error);
-      this.showError(`Calculation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } catch (err: any) {
+      this.showError(err.message || String(err));
     } finally {
-      this.setCalculating(false);
+      this.hideLoading();
     }
   }
 
-  private displayFundingInfo(fundingInfo: any): void {
-    const addressDisplay = document.getElementById('funding-address') as HTMLElement;
-    const instructionsDisplay = document.getElementById('funding-instructions') as HTMLElement;
-    const fundingSection = document.getElementById('funding-section') as HTMLElement;
-
-    if (addressDisplay) {
-      addressDisplay.textContent = fundingInfo.address;
-    }
-
-    if (instructionsDisplay) {
-      instructionsDisplay.textContent = fundingInfo.fundingInstructions;
-    }
-
-    if (fundingSection) {
-      fundingSection.style.display = 'block';
-    }
+  // --- Refund Workflow ---
+  private startRefundScanner() {
+    this.refundScanner = new Html5Qrcode('refund-scanner');
+    this.refundScannerDiv.innerHTML = '<p>Scan QR Code A (Transaction Data).</p>';
+    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+    this.refundScanner.start(
+  { facingMode: 'environment' },
+  config,
+  (decodedText: string, decodedResult: any) => this.handleRefundScan(decodedText),
+  (errorMessage: string) => { /* ignore scan errors */ }
+);
   }
 
-  private updateFundingStatus(message: string, type: 'success' | 'warning' | 'error' | 'info' = 'info'): void {
-    const statusElement = document.getElementById('funding-status') as HTMLElement;
-    
-    if (statusElement) {
-      statusElement.textContent = message;
-      statusElement.className = `funding-status ${type}`;
-      statusElement.style.display = 'block';
-    }
-  }
-
-  private displayResults(result: CalculationResult): void {
-    const resultsDiv = document.getElementById('results') as HTMLElement;
-    
-    if (!resultsDiv) return;
-
-    const elements = {
-      operation: document.getElementById('operation'),
-      result: document.getElementById('result'),
-      address: document.getElementById('address'),
-      txid: document.getElementById('txid'),
-      fee: document.getElementById('fee'),
-      rawTx: document.getElementById('rawTx'),
-      mempoolLink: document.getElementById('mempoolLink') as HTMLAnchorElement,
-      broadcastStatus: document.getElementById('broadcast-status'),
-      privateKey: document.getElementById('private-key')
-    };
-
-    if (elements.operation) elements.operation.textContent = result.operation;
-    if (elements.result) elements.result.textContent = result.result.toString();
-    if (elements.address) elements.address.textContent = result.taprootAddress;
-    if (elements.txid) elements.txid.textContent = result.txid;
-    if (elements.fee) elements.fee.textContent = `${result.fee} sats`;
-    if (elements.rawTx) elements.rawTx.textContent = result.rawTx;
-    if (elements.privateKey) elements.privateKey.textContent = result.privateKey;
-
-    if (elements.broadcastStatus) {
-      const statusText = result.broadcastStatus === 'success' ? '✅ Successfully broadcasted' : '❌ Broadcast failed';
-      elements.broadcastStatus.textContent = statusText;
-      elements.broadcastStatus.className = `broadcast-status ${result.broadcastStatus}`;
-    }
-
-    if (elements.mempoolLink) {
-      const mempoolUrl = `https://mempool.space/testnet/tx/${result.txid}`;
-      elements.mempoolLink.href = mempoolUrl;
-      elements.mempoolLink.textContent = 'View on Mempool.space';
-    }
-
-    resultsDiv.style.display = 'block';
-  }
-
-  private setCalculating(isCalculating: boolean): void {
-    this.state.isCalculating = isCalculating;
-    const calculateButton = document.getElementById('calculateBtn') as HTMLButtonElement;
-    const loadingDiv = document.getElementById('loading') as HTMLElement;
-
-    if (calculateButton) {
-      calculateButton.disabled = isCalculating;
-      calculateButton.textContent = isCalculating ? 
-        'Creating & Broadcasting Transaction...' : 'Calculate & Create Real Transaction';
-    }
-
-    if (loadingDiv) {
-      loadingDiv.style.display = isCalculating ? 'block' : 'none';
-    }
-  }
-
-  private showLoading(message: string): void {
-    const loadingDiv = document.getElementById('loading') as HTMLElement;
-    if (loadingDiv) {
-      loadingDiv.textContent = message;
-      loadingDiv.style.display = 'block';
-    }
-  }
-
-  private hideLoading(): void {
-    const loadingDiv = document.getElementById('loading') as HTMLElement;
-    if (loadingDiv) {
-      loadingDiv.style.display = 'none';
-    }
-  }
-
-  private showError(message: string): void {
-    this.state.error = message;
-    const errorDiv = document.getElementById('error') as HTMLElement;
-    if (errorDiv) {
-      errorDiv.textContent = message;
-      errorDiv.style.display = 'block';
-    }
-  }
-
-  private clearError(): void {
-    this.state.error = null;
-    const errorDiv = document.getElementById('error') as HTMLElement;
-    if (errorDiv) {
-      errorDiv.style.display = 'none';
-    }
-  }
-
-  private async checkNetworkStatus(): Promise<void> {
+  private handleRefundScan(decodedText: string) {
     try {
-      const response = await fetch(`${this.apiBaseUrl}/network-status`);
-      const status = await response.json();
-      
-      const networkStatusDiv = document.getElementById('network-status') as HTMLElement;
-      if (networkStatusDiv) {
-        const statusText = status.isHealthy ? 
-          `✅ Network: Block ${status.blockHeight}, ${status.mempoolSize} pending txs` :
-          '❌ Network: Disconnected';
-        networkStatusDiv.textContent = statusText;
-        networkStatusDiv.className = status.isHealthy ? 'network-status healthy' : 'network-status unhealthy';
-      }
-    } catch (error) {
-      console.warn('Failed to check network status:', error);
+      const data = JSON.parse(decodedText) as OfflineTxoData;
+      if (data.taprootAddress && data.txid) {
+        this.scannedTxoData = data;
+        this.refundScanner?.stop();
+        this.refundScannerDiv.innerHTML = '<p style="color:green;">Transaction QR Code Scanned! Enter your private key to refund.</p>';
+        this.refundForm.classList.remove('form-hidden');
+      } else throw new Error();
+    } catch {
+      this.showError('Unrecognized QR Code.');
     }
+  }
+
+  private async handleRefundSubmit(e: Event) {
+    e.preventDefault();
+    if (!this.scannedTxoData) {
+      this.showError('Please scan the transaction QR code first.');
+      return;
+    }
+    this.showLoading('Creating refund transaction...');
+    try {
+      const formData = new FormData(this.refundForm);
+      const senderWif = formData.get('sender-wif') as string;
+      const resp = await fetch('/api/create-sender-refund-transaction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ txoData: this.scannedTxoData, senderWif })
+      });
+      if (!resp.ok) throw new Error((await resp.json()).message || 'Failed to create refund transaction');
+      const result = await resp.json();
+      // Display refund results (implement as needed)
+    } catch (err: any) {
+      this.showError(err.message || String(err));
+    } finally {
+      this.hideLoading();
+    }
+  }
+
+  // --- Utility UI Methods ---
+  private showLoading(message: string) {
+    this.loadingDiv.textContent = message;
+    this.loadingDiv.style.display = 'block';
+  }
+  private hideLoading() {
+  this.loadingDiv.style.display = 'none';
+}
+
+  private async copyToClipboard(text: string): Promise<boolean> {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch {
+        /* fall through to legacy method */
+      }
+    }
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private showToast(message: string, success: boolean = true) {
+    this.toastDiv.textContent = message;
+    this.toastDiv.style.background = success ? '#198754' : '#dc3545';
+    this.toastDiv.classList.add('show');
+    setTimeout(() => this.toastDiv.classList.remove('show'), 3000);
+  }
+
+// --- Clipboard Paste Helpers ---
+private async handlePasteTx() {
+  try {
+    const text = await navigator.clipboard.readText();
+    const data = JSON.parse(text) as OfflineTxoData;
+    if (data.taprootAddress && data.txid) {
+      this.scannedTxoData = data;
+      this.receiverScannerDiv.innerHTML = '<p style="color:green;">Transaction data pasted!</p>';
+      this.showToast('Transaction data pasted from clipboard');
+    } else throw new Error();
+  } catch {
+    this.showError('Clipboard does not contain valid transaction data.');
+  }
+  this.checkReceiverReady();
+}
+
+private async handlePasteSecret() {
+  try {
+    const raw = await navigator.clipboard.readText();
+    const trimmed = raw.trim();
+    const match = trimmed.match(/[0-9a-fA-F]{64}/);
+    if (match) {
+      this.scannedPreimage = match[0];
+    } else if (trimmed.length > 0) {
+      // Accept any non-empty secret for now (backend may send shorter placeholder during dev)
+      this.scannedPreimage = trimmed;
+    } else {
+      throw new Error();
+    }
+    this.receiverScannerDiv.innerHTML += '<p style="color:green;">Secret pasted!</p>';
+    this.showToast('Secret pasted from clipboard');
+  } catch {
+    this.showToast('Clipboard does not contain a valid secret', false);
+    this.showError('Clipboard does not contain valid secret.');
+  }
+  this.checkReceiverReady();
+}
+
+private checkReceiverReady() {
+  if (this.scannedTxoData && this.scannedPreimage) {
+    this.receiverScanner?.stop();
+    this.receiverScannerDiv.innerHTML = '<p style="color:green; font-weight:bold;">Transaction & Secret ready. Enter your private key to claim.</p>';
+    this.receiverForm.classList.remove('form-hidden');
   }
 }
 
-// Initialize app when DOM is ready
-let calculatorApp: RealBitcoinCalculatorApp;
+  private showError(message: string) {
+    this.errorDiv.textContent = message;
+    this.errorDiv.style.display = 'block';
+  }
+  // --- Key Generation ---
+  private async handleGenerateSender() {
+    try {
+      const resp = await fetch('/api/generate-keypair');
+      if (!resp.ok) throw new Error('Failed to generate key');
+      const { wif } = await resp.json();
+      this.senderWifInput.value = wif;
+    } catch (err: any) {
+      this.showError(err.message || String(err));
+    }
+  }
 
+  private async handleGenerateReceiver() {
+    try {
+      const resp = await fetch('/api/generate-keypair');
+      if (!resp.ok) throw new Error('Failed to generate key');
+      const { wif, pubkeyHex } = await resp.json();
+      this.receiverWifInput.value = wif;
+      this.receiverGeneratedDiv.textContent = `PubKey: ${pubkeyHex}`;
+      // Autofill sender form receiver pubkey if present
+      const receiverPubInput = document.querySelector<HTMLInputElement>('input[name="receiver-address"]');
+      if (receiverPubInput) receiverPubInput.value = pubkeyHex;
+    } catch (err: any) {
+      this.showError(err.message || String(err));
+    }
+  }
+
+  private hideError() {
+    this.errorDiv.style.display = 'none';
+  }
+  private clearError() {
+    this.errorDiv.textContent = '';
+    this.errorDiv.style.display = 'none';
+  }
+}
+
+// --- App Initialization ---
+// --- App Initialization ---
+let app: OfflineBtcApp;
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
-    calculatorApp = new RealBitcoinCalculatorApp();
-    (window as any).calculator = calculatorApp;
+    app = new OfflineBtcApp();
+    (window as any).offlineBtcApp = app;
   });
 } else {
-  calculatorApp = new RealBitcoinCalculatorApp();
-  (window as any).calculator = calculatorApp;
+  app = new OfflineBtcApp();
+  (window as any).offlineBtcApp = app;
 }

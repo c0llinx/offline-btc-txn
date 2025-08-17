@@ -170,21 +170,19 @@ export class MempoolAPI {
       const addressInfo = await this.getAddressInfo(address);
       const utxos = await this.getAddressUTXOs(address);
 
-      const confirmedBalance = utxos
-        .filter(utxo => utxo.confirmations > 0)
-        .reduce((sum, utxo) => sum + utxo.value, 0);
+      const confirmed = utxos
+        .filter(utxo => utxo.confirmations !== undefined && utxo.confirmations > 0);
 
-      const unconfirmedBalance = utxos
-        .filter(utxo => utxo.confirmations === 0)
-        .reduce((sum, utxo) => sum + utxo.value, 0);
+      const unconfirmed = utxos
+        .filter(utxo => utxo.confirmations === undefined || utxo.confirmations === 0);
 
-      const availableBalance = confirmedBalance + unconfirmedBalance;
+      const availableBalance = confirmed.reduce((sum, utxo) => sum + utxo.value, 0) + unconfirmed.reduce((sum, utxo) => sum + utxo.value, 0);
 
       return {
         hasBalance: availableBalance >= requiredAmount,
         availableBalance,
-        confirmedBalance,
-        unconfirmedBalance
+        confirmedBalance: confirmed.reduce((sum, utxo) => sum + utxo.value, 0),
+        unconfirmedBalance: unconfirmed.reduce((sum, utxo) => sum + utxo.value, 0)
       };
     } catch (error) {
       throw this.handleAPIError(error, `Failed to check balance for address ${address}`);

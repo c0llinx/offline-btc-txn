@@ -1,6 +1,10 @@
 import express from 'express';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import cors from 'cors';
 import { TaprootCalculatorService } from './calculator.js';
+import { OfflineWorkflowService } from './workflow.ts';
+import { RealBitcoinCalculator } from './bitcoin.js';
 import { CalculationRequest } from '../shared/types.js';
 
 const app = express();
@@ -9,10 +13,37 @@ const PORT = process.env.PORT || 3001;
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.static('dist/client'));
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Serve static files from Vite build output
+const clientBuildPath = path.resolve(__dirname, '../../dist/client');
+app.use(express.static(clientBuildPath));
 
-// Initialize calculator service
+// Initialize services
 const calculatorService = new TaprootCalculatorService();
+const workflowService = new OfflineWorkflowService();
+
+// Serve UI root
+app.get('/', (_req, res) => {
+  res.sendFile(path.join(clientBuildPath, 'index.html'));
+});
+
+// Routes
+
+/**
+ * Generate a random key pair (WIF + pubkey hex) for testing.
+ */
+app.get('/api/generate-keypair', (_req, res) => {
+  try {
+    const wallet = new RealBitcoinCalculator();
+    const keyPair = wallet.generateKeyPair();
+    res.json({
+      wif: keyPair.toWIF(),
+      pubkeyHex: keyPair.publicKey.toString('hex')
+    });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to generate key pair' });
+  }
+});
 
 // Routes
 
@@ -242,6 +273,60 @@ app.use((error: Error, req: express.Request, res: express.Response, next: expres
 });
 
 // 404 handler
+// --- Offline Workflow Endpoints ---
+
+/**
+ * Sender: create initial funding PSBT (QR Code A + B)
+ */
+app.post('/api/create-sender-transaction', async (req, res) => {
+  try {
+    const { senderWif, receiverAddress, amount, refundLocktime } = req.body;
+    if (!senderWif || !receiverAddress || typeof amount !== 'number' || typeof refundLocktime !== 'number') {
+      return res.status(400).json({ error: 'senderWif, receiverAddress, amount, refundLocktime required' });
+    }
+    const result = await workflowService.createFundingPSBT(senderWif, receiverAddress, amount, refundLocktime);
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to create sender transaction' });
+  }
+});
+
+/**
+ * Receiver: create claim PSBT
+ */
+app.post('/api/create-receiver-claim-transaction', async (req, res) => {
+  try {
+    const { txoData, preimage, receiverWif } = req.body;
+    if (!txoData || !preimage || !receiverWif) {
+      return res.status(400).json({ error: 'txoData, preimage, receiverWif required' });
+    }
+    const { txid, vout, value, senderPublicKey, refundTimeLock } = txoData;
+    const result = await workflowService.createClaimPSBT(receiverWif, preimage, txid, vout, value, senderPublicKey, refundTimeLock);
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to create claim transaction' });
+  }
+});
+
+/**
+ * Sender: create refund PSBT (after timelock)
+ */
+app.post('/api/create-sender-refund-transaction', async (req, res) => {
+  try {
+    const { txoData, senderWif } = req.body;
+    if (!txoData || !senderWif) {
+      return res.status(400).json({ error: 'txoData and senderWif required' });
+    }
+    const { txid, vout, value, receiverPublicKey, refundTimeLock } = txoData;
+    const result = await workflowService.createRefundPSBT(senderWif, txid, vout, value, receiverPublicKey, refundTimeLock);
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to create refund transaction' });
+  }
+});
+
+// --- Legacy arithmetic endpoints remain below (may be deprecated) --
+
 app.use((req, res) => {
   res.status(404).json({
     error: 'Endpoint not found',
