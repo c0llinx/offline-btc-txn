@@ -26,3 +26,5 @@ Tx Data (QR Code A)
   The claim script requires: OP_HASH160 <preimage_hash> OP_EQUALVERIFY <receiver_pubkey> OP_CHECKSIG
   - so the receiver must provide both the preimage and their signature to claim the funds before the
   timelock expires.
+
+  P2WPKH stands for Pay-to-Witness-Public-Key-Hash

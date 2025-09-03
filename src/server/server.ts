@@ -46,6 +46,14 @@ app.get('/test-wallet.html', (_req, res) => {
   res.sendFile(path.join(rootPath, 'test-wallet.html'));
 });
 
+app.get('/index.html', (_req, res) => {
+  res.sendFile(path.join(rootPath, 'index.html'));
+});
+
+app.get('/simple-wallet.html', (_req, res) => {
+  res.sendFile(path.join(rootPath, 'simple-wallet.html'));
+});
+
 // Routes
 
 /**
@@ -455,7 +463,9 @@ app.get('/api/wallet/balance/:address', async (req, res) => {
     const balanceInfo = await mempoolAPI.checkAddressBalance(address, 0);
     res.json({ balance: balanceInfo.availableBalance });
   } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get balance' });
+    console.log('Balance check failed, returning 0 for demo:', error);
+    // Return 0 balance when API fails instead of error
+    res.json({ balance: 0, apiError: true });
   }
 });
 
@@ -468,10 +478,27 @@ app.post('/api/wallet/send', async (req, res) => {
     }
 
     const keyPair = ECPair.fromWIF(privateKey, bitcoin.networks.testnet);
-    const utxos = await mempoolAPI.getAddressUTXOs(fromAddress);
+    let utxos;
+    try {
+      utxos = await mempoolAPI.getAddressUTXOs(fromAddress);
+    } catch (error) {
+      return res.status(400).json({ 
+        error: 'Mempool API unavailable. Cannot verify UTXOs. Please try again later or fund the address first.',
+        details: 'The mempool.space API is currently experiencing issues (502 errors)',
+        fundingInstructions: 'Fund your address at: https://testnet-faucet.mempool.co/'
+      });
+    }
     
     if (utxos.length === 0) {
-      throw new Error('No UTXOs found');
+      return res.status(400).json({
+        error: 'No UTXOs found for this address. Please fund the address using testnet faucets first.',
+        fundingInstructions: 'Visit: https://testnet-faucet.mempool.co/ and send testnet Bitcoin to: ' + fromAddress,
+        faucetLinks: [
+          'https://testnet-faucet.mempool.co/',
+          'https://bitcoinfaucet.uo1.net/',
+          'https://coinfaucet.eu/en/btc-testnet/'
+        ]
+      });
     }
 
     const psbt = new bitcoin.Psbt({ network: bitcoin.networks.testnet });
@@ -482,16 +509,33 @@ app.post('/api/wallet/send', async (req, res) => {
       throw new Error(`Insufficient funds. Required: ${amount + fee}, Available: ${totalInput}`);
     }
 
-    // Add inputs
+    // Determine address type to use correct input format
+    const isP2TR = fromAddress.startsWith('tb1p');
+    
+    // Add inputs with proper format for address type
     for (const utxo of utxos) {
-      psbt.addInput({
-        hash: utxo.txid,
-        index: utxo.vout,
-        witnessUtxo: {
-          script: Buffer.from(utxo.scriptPubKey, 'hex'),
-          value: utxo.value,
-        },
-      });
+      if (isP2TR) {
+        // P2TR input
+        psbt.addInput({
+          hash: utxo.txid,
+          index: utxo.vout,
+          witnessUtxo: {
+            script: Buffer.from(utxo.scriptPubKey, 'hex'),
+            value: utxo.value,
+          },
+          tapInternalKey: keyPair.publicKey.slice(1, 33), // x-only pubkey for P2TR
+        });
+      } else {
+        // P2WPKH input
+        psbt.addInput({
+          hash: utxo.txid,
+          index: utxo.vout,
+          witnessUtxo: {
+            script: Buffer.from(utxo.scriptPubKey, 'hex'),
+            value: utxo.value,
+          },
+        });
+      }
     }
 
     // Add main output
@@ -504,14 +548,22 @@ app.post('/api/wallet/send', async (req, res) => {
     }
 
     // Sign and finalize
-    psbt.signAllInputs(keyPair);
-    psbt.finalizeAllInputs();
-    
-    const tx = psbt.extractTransaction();
-    const txid = await mempoolAPI.broadcastTransaction(tx.toHex());
-    const explorerUrl = mempoolAPI.getMempoolURL(txid);
+    try {
+      console.log(`Signing transaction for ${isP2TR ? 'P2TR' : 'P2WPKH'} address`);
+      psbt.signAllInputs(keyPair);
+      psbt.finalizeAllInputs();
+      
+      const tx = psbt.extractTransaction();
+      console.log('Transaction created successfully, broadcasting...');
+      
+      const txid = await mempoolAPI.broadcastTransaction(tx.toHex());
+      const explorerUrl = mempoolAPI.getMempoolURL(txid);
 
-    res.json({ txid, fee, explorerUrl });
+      res.json({ txid, fee, explorerUrl });
+    } catch (signError) {
+      console.error('Transaction signing/broadcast error:', signError);
+      throw new Error(`Transaction creation failed: ${signError instanceof Error ? signError.message : 'Unknown signing error'}`);
+    }
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to send transaction' });
   }

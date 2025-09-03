@@ -206,8 +206,14 @@
                 document.getElementById('create-result').innerHTML = `
                     <div class="success">
                         <h3>Wallet Created!</h3>
-                        <p>Address: ${wallet.address}</p>
-                        <p>Private Key: ${wallet.privateKey}</p>
+                        <p><strong>Address:</strong> ${wallet.address}</p>
+                        <p><strong>Private Key:</strong> ${wallet.privateKey}</p>
+                        <p><strong>⚠️ Fund this address to send transactions:</strong></p>
+                        <ul>
+                            <li><a href="https://testnet-faucet.mempool.co/" target="_blank">Mempool.co Faucet</a></li>
+                            <li><a href="https://bitcoinfaucet.uo1.net/" target="_blank">BitcoinFaucet.uo1.net</a></li>
+                            <li><a href="https://coinfaucet.eu/en/btc-testnet/" target="_blank">CoinFaucet.eu</a></li>
+                        </ul>
                     </div>
                 `;
                 
