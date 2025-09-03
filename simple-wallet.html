@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bitcoin Testnet Wallet - Simple</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .tab-btn {
+            padding: 10px 20px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            background: #f8f9fa;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        .tab-btn.active {
+            background: #007bff;
+            color: white;
+        }
+        .tab-content {
+            display: none;
+            margin-top: 20px;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .btn {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .btn:hover {
+            background: #0056b3;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .form-group {
+            margin: 15px 0;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🪙 Bitcoin Testnet Wallet</h1>
+        <p><a href="index.html">← Back to HTLC</a></p>
+
+        <div>
+            <button class="tab-btn active" onclick="showTab('overview')">Overview</button>
+            <button class="tab-btn" onclick="showTab('create')">Create Wallet</button>
+            <button class="tab-btn" onclick="showTab('import')">Import Wallet</button>
+            <button class="tab-btn" onclick="showTab('send')">Send</button>
+        </div>
+
+        <!-- Overview Tab -->
+        <div id="overview" class="tab-content active">
+            <h2>Current Wallet</h2>
+            <div id="wallet-display">No wallet loaded</div>
+            <button class="btn" onclick="testAPI()">Test API</button>
+        </div>
+
+        <!-- Create Tab -->
+        <div id="create" class="tab-content">
+            <h2>Create New Wallet</h2>
+            <div class="form-group">
+                <label>Wallet Name:</label>
+                <input type="text" id="wallet-name" placeholder="My Wallet">
+            </div>
+            <div class="form-group">
+                <label>Address Type:</label>
+                <select id="address-type">
+                    <option value="p2wpkh">P2WPKH</option>
+                    <option value="p2tr">P2TR</option>
+                </select>
+            </div>
+            <button class="btn" onclick="createWallet()">Create Wallet</button>
+            <div id="create-result"></div>
+        </div>
+
+        <!-- Import Tab -->
+        <div id="import" class="tab-content">
+            <h2>Import Wallet</h2>
+            <div class="form-group">
+                <label>Wallet Name:</label>
+                <input type="text" id="import-name" placeholder="Imported Wallet">
+            </div>
+            <div class="form-group">
+                <label>Private Key (WIF):</label>
+                <textarea id="import-key" placeholder="cT32zctx..."></textarea>
+            </div>
+            <button class="btn" onclick="importWallet()">Import Wallet</button>
+            <div id="import-result"></div>
+        </div>
+
+        <!-- Send Tab -->
+        <div id="send" class="tab-content">
+            <h2>Send Bitcoin</h2>
+            <div class="form-group">
+                <label>Recipient Address:</label>
+                <input type="text" id="recipient" placeholder="tb1q...">
+            </div>
+            <div class="form-group">
+                <label>Amount (sats):</label>
+                <input type="number" id="amount" placeholder="10000">
+            </div>
+            <button class="btn" onclick="sendBitcoin()">Send Bitcoin</button>
+            <div id="send-result"></div>
+        </div>
+    </div>
+
+    <script>
+        console.log('Simple wallet script loaded');
+        let currentWallet = null;
+
+        function showTab(tabName) {
+            console.log('Switching to tab:', tabName);
+            
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab
+            const targetTab = document.getElementById(tabName);
+            if (targetTab) {
+                targetTab.classList.add('active');
+            }
+            
+            // Update button states
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+        }
+
+        async function testAPI() {
+            console.log('Testing API...');
+            try {
+                const response = await fetch('/api/wallet/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: 'Test', addressType: 'p2wpkh' })
+                });
+                const result = await response.json();
+                console.log('API result:', result);
+                alert('API works! Address: ' + result.address);
+            } catch (error) {
+                console.error('API error:', error);
+                alert('API error: ' + error);
+            }
+        }
+
+        async function createWallet() {
+            const name = document.getElementById('wallet-name').value;
+            const addressType = document.getElementById('address-type').value;
+            
+            if (!name) {
+                alert('Please enter wallet name');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/wallet/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, addressType })
+                });
+                const wallet = await response.json();
+                currentWallet = wallet;
+                
+                document.getElementById('create-result').innerHTML = `
+                    <div class="success">
+                        <h3>Wallet Created!</h3>
+                        <p>Address: ${wallet.address}</p>
+                        <p>Private Key: ${wallet.privateKey}</p>
+                    </div>
+                `;
+                
+                updateWalletDisplay();
+            } catch (error) {
+                document.getElementById('create-result').innerHTML = `
+                    <div class="error">Error: ${error}</div>
+                `;
+            }
+        }
+
+        async function importWallet() {
+            const name = document.getElementById('import-name').value;
+            const privateKey = document.getElementById('import-key').value;
+            
+            if (!name || !privateKey) {
+                alert('Please fill all fields');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/wallet/import', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, privateKey })
+                });
+                const wallet = await response.json();
+                currentWallet = wallet;
+                
+                document.getElementById('import-result').innerHTML = `
+                    <div class="success">
+                        <h3>Wallet Imported!</h3>
+                        <p>Address: ${wallet.address}</p>
+                        <p>Balance: ${wallet.balance} sats</p>
+                    </div>
+                `;
+                
+                updateWalletDisplay();
+            } catch (error) {
+                document.getElementById('import-result').innerHTML = `
+                    <div class="error">Error: ${error}</div>
+                `;
+            }
+        }
+
+        function updateWalletDisplay() {
+            const display = document.getElementById('wallet-display');
+            if (currentWallet) {
+                display.innerHTML = `
+                    <div class="success">
+                        <h3>${currentWallet.name}</h3>
+                        <p>Address: ${currentWallet.address}</p>
+                        <p>Balance: ${currentWallet.balance} sats</p>
+                        <p>Type: ${currentWallet.addressType}</p>
+                    </div>
+                `;
+            }
+        }
+
+        async function sendBitcoin() {
+            if (!currentWallet) {
+                alert('Load wallet first');
+                return;
+            }
+            
+            const recipient = document.getElementById('recipient').value;
+            const amount = document.getElementById('amount').value;
+            
+            if (!recipient || !amount) {
+                alert('Fill all fields');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/wallet/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        fromAddress: currentWallet.address,
+                        privateKey: currentWallet.privateKey,
+                        toAddress: recipient,
+                        amount: parseInt(amount),
+                        feeRate: 10
+                    })
+                });
+                const result = await response.json();
+                
+                document.getElementById('send-result').innerHTML = `
+                    <div class="success">
+                        <h3>Transaction Sent!</h3>
+                        <p>TXID: ${result.txid}</p>
+                        <p><a href="${result.explorerUrl}" target="_blank">View on Explorer</a></p>
+                    </div>
+                `;
+            } catch (error) {
+                document.getElementById('send-result').innerHTML = `
+                    <div class="error">Error: ${error}</div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

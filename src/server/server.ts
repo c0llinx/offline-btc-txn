@@ -5,10 +5,20 @@ import cors from 'cors';
 import { TaprootCalculatorService } from './calculator.js';
 import { OfflineWorkflowService } from './workflow.ts';
 import { RealBitcoinCalculator } from './bitcoin.js';
+import { MempoolAPI } from './mempool.js';
 import { CalculationRequest } from '../shared/types.js';
+import * as bitcoin from 'bitcoinjs-lib';
+import { ECPairFactory } from 'ecpair';
+import * as ecc from 'tiny-secp256k1';
+
+bitcoin.initEccLib(ecc);
+const ECPair = ECPairFactory(ecc);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Initialize services
+const mempoolAPI = new MempoolAPI();
 
 // Middleware
 app.use(cors());
@@ -22,9 +32,18 @@ app.use(express.static(clientBuildPath));
 const calculatorService = new TaprootCalculatorService();
 const workflowService = new OfflineWorkflowService();
 
-// Serve UI root
+// Serve HTML files from root directory
+const rootPath = path.resolve(__dirname, '../../');
 app.get('/', (_req, res) => {
-  res.sendFile(path.join(clientBuildPath, 'index.html'));
+  res.sendFile(path.join(rootPath, 'index.html'));
+});
+
+app.get('/wallet.html', (_req, res) => {
+  res.sendFile(path.join(rootPath, 'wallet.html'));
+});
+
+app.get('/test-wallet.html', (_req, res) => {
+  res.sendFile(path.join(rootPath, 'test-wallet.html'));
 });
 
 // Routes
@@ -284,9 +303,19 @@ app.post('/api/create-sender-transaction', async (req, res) => {
     if (!senderWif || !receiverAddress || typeof amount !== 'number' || typeof refundLocktime !== 'number') {
       return res.status(400).json({ error: 'senderWif, receiverAddress, amount, refundLocktime required' });
     }
+    
     const result = await workflowService.createFundingPSBT(senderWif, receiverAddress, amount, refundLocktime);
-    res.json(result);
+    
+    // Broadcast the funding transaction to start HTLC timing
+    if (result.psbt && result.psbt !== 'TODO') {
+      const broadcastTxid = await mempoolAPI.broadcastTransaction(result.psbt);
+      const explorerUrl = mempoolAPI.getMempoolURL(broadcastTxid);
+      res.json({ ...result, broadcastTxid, explorerUrl, htlcStarted: true });
+    } else {
+      res.json(result);
+    }
   } catch (error) {
+    console.error('Sender transaction creation error:', error);
     res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to create sender transaction' });
   }
 });
@@ -301,8 +330,23 @@ app.post('/api/create-receiver-claim-transaction', async (req, res) => {
       return res.status(400).json({ error: 'txoData, preimage, receiverWif required' });
     }
     const { txid, vout, value, senderPublicKey, refundTimeLock } = txoData;
+    
+    // Check if HTLC has elapsed
+    const currentHeight = (await mempoolAPI.checkNetworkHealth()).blockHeight;
+    if (currentHeight >= refundTimeLock) {
+      return res.status(400).json({ error: 'HTLC has expired. Funds can only be refunded by sender now.' });
+    }
+    
     const result = await workflowService.createClaimPSBT(receiverWif, preimage, txid, vout, value, senderPublicKey, refundTimeLock);
-    res.json(result);
+    
+    // Broadcast the claim transaction
+    if (result.rawTx) {
+      const broadcastTxid = await mempoolAPI.broadcastTransaction(result.rawTx);
+      const explorerUrl = mempoolAPI.getMempoolURL(broadcastTxid);
+      res.json({ ...result, broadcastTxid, explorerUrl });
+    } else {
+      res.json(result);
+    }
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to create claim transaction' });
   }
@@ -325,6 +369,177 @@ app.post('/api/create-sender-refund-transaction', async (req, res) => {
   }
 });
 
+/**
+ * Wallet API endpoints
+ */
+
+// Create new wallet
+app.post('/api/wallet/create', async (req, res) => {
+  try {
+    const { name, addressType } = req.body;
+    if (!name || !addressType) {
+      return res.status(400).json({ error: 'Name and addressType required' });
+    }
+
+    const keyPair = ECPair.makeRandom({ network: bitcoin.networks.testnet });
+    let address: string;
+
+    switch (addressType) {
+      case 'p2wpkh':
+        address = bitcoin.payments.p2wpkh({ pubkey: keyPair.publicKey, network: bitcoin.networks.testnet }).address!;
+        break;
+      case 'p2tr':
+        address = bitcoin.payments.p2tr({ internalPubkey: keyPair.publicKey.slice(1, 33), network: bitcoin.networks.testnet }).address!;
+        break;
+      case 'p2sh':
+        const p2wpkh = bitcoin.payments.p2wpkh({ pubkey: keyPair.publicKey, network: bitcoin.networks.testnet });
+        address = bitcoin.payments.p2sh({ redeem: p2wpkh, network: bitcoin.networks.testnet }).address!;
+        break;
+      default:
+        return res.status(400).json({ error: 'Invalid address type' });
+    }
+
+    const wallet = {
+      name,
+      address,
+      privateKey: keyPair.toWIF(),
+      publicKey: keyPair.publicKey.toString('hex'),
+      addressType,
+      balance: 0,
+      created: new Date().toISOString()
+    };
+
+    res.json(wallet);
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to create wallet' });
+  }
+});
+
+// Import existing wallet
+app.post('/api/wallet/import', async (req, res) => {
+  try {
+    const { name, privateKey } = req.body;
+    if (!name || !privateKey) {
+      return res.status(400).json({ error: 'Name and privateKey required' });
+    }
+
+    const keyPair = ECPair.fromWIF(privateKey, bitcoin.networks.testnet);
+    
+    // Try to determine address type and create address
+    const p2wpkh = bitcoin.payments.p2wpkh({ pubkey: keyPair.publicKey, network: bitcoin.networks.testnet });
+    const address = p2wpkh.address!;
+    
+    // Check balance
+    const balanceInfo = await mempoolAPI.checkAddressBalance(address, 0);
+
+    const wallet = {
+      name,
+      address,
+      privateKey: keyPair.toWIF(),
+      publicKey: keyPair.publicKey.toString('hex'),
+      addressType: 'p2wpkh' as const,
+      balance: balanceInfo.availableBalance,
+      created: new Date().toISOString()
+    };
+
+    res.json(wallet);
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to import wallet' });
+  }
+});
+
+// Get wallet balance
+app.get('/api/wallet/balance/:address', async (req, res) => {
+  try {
+    const { address } = req.params;
+    const balanceInfo = await mempoolAPI.checkAddressBalance(address, 0);
+    res.json({ balance: balanceInfo.availableBalance });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get balance' });
+  }
+});
+
+// Send transaction
+app.post('/api/wallet/send', async (req, res) => {
+  try {
+    const { fromAddress, privateKey, toAddress, amount, feeRate } = req.body;
+    if (!fromAddress || !privateKey || !toAddress || !amount || !feeRate) {
+      return res.status(400).json({ error: 'All fields required' });
+    }
+
+    const keyPair = ECPair.fromWIF(privateKey, bitcoin.networks.testnet);
+    const utxos = await mempoolAPI.getAddressUTXOs(fromAddress);
+    
+    if (utxos.length === 0) {
+      throw new Error('No UTXOs found');
+    }
+
+    const psbt = new bitcoin.Psbt({ network: bitcoin.networks.testnet });
+    const totalInput = utxos.reduce((sum, utxo) => sum + utxo.value, 0);
+    const fee = Math.max(1000, Math.ceil(feeRate * 200)); // Rough fee estimate
+    
+    if (totalInput < amount + fee) {
+      throw new Error(`Insufficient funds. Required: ${amount + fee}, Available: ${totalInput}`);
+    }
+
+    // Add inputs
+    for (const utxo of utxos) {
+      psbt.addInput({
+        hash: utxo.txid,
+        index: utxo.vout,
+        witnessUtxo: {
+          script: Buffer.from(utxo.scriptPubKey, 'hex'),
+          value: utxo.value,
+        },
+      });
+    }
+
+    // Add main output
+    psbt.addOutput({ address: toAddress, value: amount });
+
+    // Add change output if needed
+    const changeAmount = totalInput - amount - fee;
+    if (changeAmount > 546) {
+      psbt.addOutput({ address: fromAddress, value: changeAmount });
+    }
+
+    // Sign and finalize
+    psbt.signAllInputs(keyPair);
+    psbt.finalizeAllInputs();
+    
+    const tx = psbt.extractTransaction();
+    const txid = await mempoolAPI.broadcastTransaction(tx.toHex());
+    const explorerUrl = mempoolAPI.getMempoolURL(txid);
+
+    res.json({ txid, fee, explorerUrl });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to send transaction' });
+  }
+});
+
+// Get transaction history
+app.get('/api/wallet/history/:address', async (req, res) => {
+  try {
+    const { address } = req.params;
+    // For now, return empty array - can be enhanced to fetch actual history from mempool API
+    res.json({ transactions: [] });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get history' });
+  }
+});
+
+/**
+ * Get current block height for HTLC timing checks
+ */
+app.get('/api/block-height', async (req, res) => {
+  try {
+    const health = await mempoolAPI.checkNetworkHealth();
+    res.json({ blockHeight: health.blockHeight });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get block height' });
+  }
+});
+
 // --- Legacy arithmetic endpoints remain below (may be deprecated) --
 
 app.use((req, res) => {
@@ -336,7 +551,7 @@ app.use((req, res) => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`🍊 Real Bitcoin Taproot Calculator Server`);
+  console.log(`🍊 Offline Bitcoin Wallet Server`);
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📡 API endpoints available at http://localhost:${PORT}/api/`);
   console.log(`⚡ Ready to create real Bitcoin testnet transactions!`);
