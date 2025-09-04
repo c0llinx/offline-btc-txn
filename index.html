@@ -1805,21 +1805,152 @@
         function updateClaimDisplay() {
             if (!htlcData) return;
             
-            const htlcDisplay = document.getElementById('htlc-data-display');
-            if (!htlcDisplay) return;
+            // Hide the Load HTLC Data section
+            const loadSection = document.querySelector('#receiver-tab .htlc-grid > div:first-child');
+            if (loadSection) {
+                // Hide the buttons and scanner, but keep the HTLC data display
+                const scanBtn = document.getElementById('scan-qr-btn');
+                const pasteBtn = document.getElementById('paste-data-btn');
+                const scanner = document.getElementById('qr-scanner');
+                
+                if (scanBtn) scanBtn.style.display = 'none';
+                if (pasteBtn) pasteBtn.style.display = 'none';
+                if (scanner) scanner.classList.add('hidden');
+                
+                // Hide the h3 title "Load HTLC Data"
+                const h3Title = loadSection.querySelector('h3');
+                if (h3Title) h3Title.style.display = 'none';
+            }
             
-            htlcDisplay.classList.remove('hidden');
-            htlcDisplay.innerHTML = `
-                <h4>HTLC Contract Details</h4>
-                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #28a745;">
-                    <p><strong>Transaction ID:</strong> ${htlcData.txid}</p>
-                    <p><strong>Output Index:</strong> ${htlcData.vout}</p>
-                    <p><strong>Amount:</strong> ${(htlcData.value || htlcData.amount).toLocaleString()} satoshis</p>
-                    <p><strong>Contract Address:</strong> ${htlcData.receiverAddress || htlcData.taprootAddress || 'N/A'}</p>
-                    <p><strong>Refund Locktime:</strong> Block ${htlcData.refundTimeLock}</p>
-                    ${htlcData.preimage ? `<p><strong>Preimage:</strong> ${htlcData.preimage.slice(0, 20)}...</p>` : ''}
-                </div>
-            `;
+            // Show HTLC contract details
+            const htlcDisplay = document.getElementById('htlc-data-display');
+            if (htlcDisplay) {
+                htlcDisplay.classList.remove('hidden');
+                htlcDisplay.innerHTML = `
+                    <h4>HTLC Contract Details</h4>
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #28a745;">
+                        <p><strong>Transaction ID:</strong> ${htlcData.txid}</p>
+                        <p><strong>Output Index:</strong> ${htlcData.vout}</p>
+                        <p><strong>Amount:</strong> ${(htlcData.value || htlcData.amount).toLocaleString()} satoshis</p>
+                        <p><strong>Contract Address:</strong> ${htlcData.receiverAddress || htlcData.taprootAddress || 'N/A'}</p>
+                        <p><strong>Refund Locktime:</strong> Block ${htlcData.refundTimeLock}</p>
+                        ${htlcData.preimage ? `<p><strong>Preimage:</strong> ${htlcData.preimage.slice(0, 20)}...</p>` : ''}
+                    </div>
+                `;
+            }
+            
+            // Show a simple claim button instead of the complex form
+            const claimSection = document.querySelector('#receiver-tab .htlc-grid > div:last-child');
+            if (claimSection) {
+                claimSection.innerHTML = `
+                    <div style="text-align: center; padding: 20px;">
+                        <button type="button" class="btn btn-success" id="simple-claim-btn" style="font-size: 18px; padding: 15px 30px;">
+                            💰 Claim HTLC Funds
+                        </button>
+                        <p style="color: #6c757d; margin-top: 10px; font-size: 14px;">
+                            Click to claim the funds from this HTLC contract
+                        </p>
+                    </div>
+                `;
+                
+                // Add event listener for the simple claim button
+                document.getElementById('simple-claim-btn')?.addEventListener('click', handleSimpleClaim);
+            }
+        }
+
+        async function handleSimpleClaim() {
+            if (!htlcData) {
+                showToast('No HTLC data loaded. Please scan or paste HTLC data first.', 'error');
+                return;
+            }
+            
+            // Get available wallets
+            const wallets = getWalletsFromStorage();
+            if (!wallets || wallets.length === 0) {
+                showToast('No wallets found. Please create a wallet first.', 'error');
+                return;
+            }
+            
+            // Auto-select the first available wallet for claiming
+            const receiverWallet = wallets[0];
+            
+            try {
+                showToast('Claiming HTLC funds...', 'info');
+                
+                const claimData = {
+                    txoData: {
+                        txid: htlcData.txid,
+                        vout: htlcData.vout,
+                        value: htlcData.value || htlcData.amount,
+                        senderPublicKey: htlcData.senderPublicKey,
+                        refundTimeLock: htlcData.refundTimeLock
+                    },
+                    preimage: htlcData.preimage,
+                    receiverWif: receiverWallet.privateKey
+                };
+                
+                console.log('Claiming HTLC with data:', claimData);
+                
+                const response = await fetch('/api/create-receiver-claim-transaction', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(claimData)
+                });
+                
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.error || 'Failed to claim HTLC funds');
+                }
+                
+                console.log('✅ HTLC claimed successfully:', result);
+                
+                // Show success message
+                showToast(`✅ HTLC funds claimed successfully! TX: ${result.broadcastTxid}`, 'success');
+                
+                // Show claim results
+                displayClaimResults(result);
+                
+            } catch (error) {
+                console.error('Claim error:', error);
+                showToast('Failed to claim HTLC funds: ' + error.message, 'error');
+            }
+        }
+        
+        function displayClaimResults(result) {
+            const claimSection = document.querySelector('#receiver-tab .htlc-grid > div:last-child');
+            if (claimSection) {
+                const txid = result.broadcastTxid || result.txid;
+                const mempoolUrl = result.explorerUrl || `https://mempool.space/testnet/tx/${txid}`;
+                
+                claimSection.innerHTML = `
+                    <div style="padding: 20px;">
+                        <div style="background: #d1e7dd; padding: 25px; border-radius: 12px; border: 2px solid #badbcc; color: #0f5132; text-align: center;">
+                            <h4 style="margin-bottom: 20px; color: #198754;">✅ HTLC Funds Claimed Successfully!</h4>
+                            
+                            <div style="background: white; padding: 15px; border-radius: 8px; margin: 15px 0; border: 1px solid #c3e6cb;">
+                                <p style="margin: 5px 0; font-weight: 600;">Transaction Status:</p>
+                                <p style="margin: 5px 0; color: #198754; font-size: 16px;">✅ Broadcasted to Network</p>
+                            </div>
+                            
+                            <div style="background: white; padding: 15px; border-radius: 8px; margin: 15px 0; border: 1px solid #c3e6cb;">
+                                <p style="margin: 5px 0; font-weight: 600;">Transaction ID:</p>
+                                <p style="font-family: monospace; word-break: break-all; font-size: 12px; margin: 10px 0; background: #f8f9fa; padding: 10px; border-radius: 4px;">${txid}</p>
+                                
+                                <a href="${mempoolUrl}" target="_blank" 
+                                   style="display: inline-block; background: #0d6efd; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: 600; margin-top: 10px;">
+                                    🔗 View on Mempool.space
+                                </a>
+                            </div>
+                            
+                            <p style="margin-top: 20px; font-size: 14px; color: #6c757d;">
+                                Your HTLC funds have been successfully claimed and sent to your wallet!<br>
+                                The transaction is now being confirmed on the Bitcoin testnet.
+                            </p>
+                        </div>
+                    </div>
+                `;
+            }
         }
 
         function testQRScanner() {
