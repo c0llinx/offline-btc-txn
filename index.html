@@ -240,6 +240,14 @@
             border-radius: 8px;
             margin: 15px 0;
             border: 1px solid #dee2e6;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .qr-display canvas {
+            margin: 10px auto;
+            display: block;
         }
 
         .success {
@@ -600,7 +608,8 @@
                             <div class="qr-display">
                                 <h4>QR Code - HTLC Data</h4>
                                 <canvas id="qrcode-canvas"></canvas>
-                                <p><small>Scan this to share HTLC details with receiver</small></p>
+                                <button class="btn btn-secondary" id="copy-htlc-data" style="margin-top: 10px; font-size: 12px; padding: 8px 12px;">📋 Copy HTLC Data</button>
+                                <p><small>Scan QR or copy data to share HTLC details with receiver</small></p>
                             </div>
                         </div>
                     </div>
@@ -752,7 +761,19 @@
         </div>
     </div>
 
-    <script src="https://unpkg.com/qrcode@1.5.4/build/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+    <script>
+        // Check QRious library loading
+        document.addEventListener('DOMContentLoaded', () => {
+            if (typeof QRious !== 'undefined') {
+                console.log('✅ QRious library loaded successfully');
+                window.qrReady = true;
+            } else {
+                console.error('❌ QRious library failed to load');
+                window.qrReady = false;
+            }
+        });
+    </script>
     <script>
         let currentTab = 'sender';
         let htlcData = null;
@@ -807,6 +828,9 @@
             document.getElementById('paste-data-btn')?.addEventListener('click', pasteHTLCData);
             document.getElementById('load-refund-data-btn')?.addEventListener('click', loadRefundData);
             document.getElementById('refresh-wallets-btn')?.addEventListener('click', refreshWallets);
+            
+            // Copy HTLC data button
+            document.getElementById('copy-htlc-data')?.addEventListener('click', copyHTLCData);
             document.getElementById('test-form-btn')?.addEventListener('click', testForm);
             document.getElementById('fill-test-data-btn')?.addEventListener('click', fillTestData);
             document.getElementById('debug-wallets-btn')?.addEventListener('click', debugWalletData);
@@ -879,6 +903,18 @@
             const stored = localStorage.getItem('bitcoin-wallets');
             availableWallets = stored ? JSON.parse(stored) : [];
             
+            // Register all wallets with the server for HTLC use
+            if (availableWallets.length > 0) {
+                console.log('Registering wallets with server for HTLC use...');
+                for (const wallet of availableWallets) {
+                    try {
+                        await registerWalletForHTLC(wallet.address, wallet.privateKey, wallet.name);
+                    } catch (error) {
+                        console.log(`Failed to register ${wallet.name}:`, error);
+                    }
+                }
+            }
+            
             // Populate all wallet dropdowns
             populateWalletDropdowns();
             displayWalletList();
@@ -886,7 +922,7 @@
             // Automatically refresh balances when wallets are loaded
             if (availableWallets.length > 0) {
                 await refreshAllWalletBalances();
-                showToast('🔄 Wallet balances refreshed from blockchain', 'success');
+                showToast('🔄 Wallets registered and balances refreshed', 'success');
             } else {
                 showToast('ℹ️ No wallets found. Create wallets in the Wallet page first.', 'info');
             }
@@ -1427,21 +1463,122 @@
                 resultsDiv.appendChild(additionalInfo);
             }
             
-            // Generate QR code
-            const qrData = JSON.stringify({
+            // Store HTLC data for copying
+            window.currentHTLCData = {
                 txid: result.txid,
-                vout: result.vout,
-                value: result.value,
+                vout: result.vout || 0,
+                value: result.value || result.amount,
                 preimage: result.preimage,
                 senderPublicKey: result.senderPublicKey,
                 refundTimeLock: result.refundTimeLock,
                 receiverPublicKey: result.receiverPublicKey,
                 htlcAddress: result.taprootAddress,
+                receiverAddress: result.receiverAddress,
                 senderWallet: htlcData.senderWallet,
                 receiverWallet: htlcData.receiverWallet
-            });
+            };
             
-            QRCode.toCanvas(document.getElementById('qrcode-canvas'), qrData, { width: 200 });
+            // Generate QR code
+            const qrData = JSON.stringify(window.currentHTLCData);
+            console.log('Generating QR code with data:', qrData);
+            
+            // Clear any previous QR code
+            const canvas = document.getElementById('qrcode-canvas');
+            if (canvas) {
+                canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
+            }
+            
+            // Generate QR code using QRious library
+            const generateQR = () => {
+                console.log('=== QR GENERATION DEBUG ===');
+                console.log('Canvas element:', !!canvas);
+                console.log('QRious available:', typeof QRious);
+                console.log('Window qrReady:', window.qrReady);
+                
+                if (!canvas) {
+                    console.error('Canvas element not found');
+                    return;
+                }
+                
+                if (typeof QRious !== 'undefined') {
+                    console.log('Using QRious library, generating...');
+                    try {
+                        // Use simpler data for QR code
+                        const simpleData = JSON.stringify({
+                            txid: result.txid,
+                            vout: result.vout || 0,
+                            value: result.value || result.amount,
+                            preimage: result.preimage,
+                            refundTimeLock: result.refundTimeLock,
+                            receiverAddress: result.receiverAddress
+                        });
+                        
+                        console.log('QR data to encode:', simpleData);
+                        console.log('QR data length:', simpleData.length);
+                        
+                        // Create QRious instance
+                        const qr = new QRious({
+                            element: canvas,
+                            value: simpleData,
+                            size: 200,
+                            level: 'M'
+                        });
+                        
+                        console.log('✅ QR code generated with QRious');
+                        canvas.style.display = 'block';
+                        
+                        // Clear any error messages
+                        const existingError = canvas.parentNode.querySelector('.qr-error');
+                        if (existingError) {
+                            existingError.remove();
+                        }
+                        
+                    } catch (err) {
+                        console.error('QRious generation error:', err);
+                        showQRError('QR generation failed: ' + err.message);
+                    }
+                } else {
+                    console.error('QRious library not available');
+                    showQRError('QRious library not loaded - trying fallback...');
+                    
+                    // Try loading QRious dynamically as fallback
+                    const script = document.createElement('script');
+                    script.src = 'https://unpkg.com/qrious@4.0.2/dist/qrious.min.js';
+                    script.onload = () => {
+                        console.log('✅ QRious loaded dynamically');
+                        generateQR();
+                    };
+                    script.onerror = () => {
+                        showQRError('Failed to load QR library');
+                    };
+                    document.head.appendChild(script);
+                }
+            };
+            
+            // Helper function to show QR errors
+            const showQRError = (message) => {
+                const qrContainer = canvas.parentNode;
+                let errorDiv = qrContainer.querySelector('.qr-error');
+                if (!errorDiv) {
+                    errorDiv = document.createElement('div');
+                    errorDiv.className = 'qr-error';
+                    errorDiv.style.color = '#dc3545';
+                    errorDiv.style.padding = '10px';
+                    errorDiv.style.textAlign = 'center';
+                    errorDiv.style.background = '#f8d7da';
+                    errorDiv.style.borderRadius = '5px';
+                    qrContainer.appendChild(errorDiv);
+                }
+                errorDiv.textContent = message;
+                canvas.style.display = 'none';
+            };
+            
+            // Generate immediately if library ready, otherwise wait
+            if (window.qrReady) {
+                generateQR();
+            } else {
+                setTimeout(generateQR, 500);
+            }
         }
 
         function displayReceiverResults(result) {
@@ -1610,6 +1747,27 @@
                 showToast('📝 Test data filled - ready to test HTLC');
             } catch (error) {
                 showError('Failed to generate test data');
+            }
+        }
+
+        function copyHTLCData() {
+            if (window.currentHTLCData) {
+                const htlcDataString = JSON.stringify(window.currentHTLCData, null, 2);
+                navigator.clipboard.writeText(htlcDataString).then(() => {
+                    showToast('📋 HTLC data copied to clipboard');
+                }).catch(err => {
+                    console.error('Failed to copy:', err);
+                    // Fallback for older browsers
+                    const textArea = document.createElement('textarea');
+                    textArea.value = htlcDataString;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                    showToast('📋 HTLC data copied to clipboard');
+                });
+            } else {
+                showError('No HTLC data available to copy');
             }
         }
 
