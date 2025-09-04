@@ -74,6 +74,18 @@ class BitcoinWallet {
     const refreshBtn = document.getElementById('refresh-balance-btn');
     refreshBtn?.addEventListener('click', () => this.refreshBalance());
 
+    // Wallet selector dropdown
+    const walletSelector = document.getElementById('wallet-selector') as HTMLSelectElement;
+    walletSelector?.addEventListener('change', (e) => {
+      const selectedAddress = (e.target as HTMLSelectElement).value;
+      if (selectedAddress) {
+        const selectedWallet = this.wallets.find(w => w.address === selectedAddress);
+        if (selectedWallet) {
+          this.setCurrentWallet(selectedWallet);
+        }
+      }
+    });
+
     // Copy buttons (delegated event listener)
     document.addEventListener('click', (e) => {
       const target = e.target as HTMLElement;
@@ -145,6 +157,8 @@ class BitcoinWallet {
       this.setCurrentWallet(wallet);
       this.displayImportWalletResult(wallet);
       
+      console.log('Wallet imported and saved to localStorage:', wallet);
+      
       // Reset form
       (e.target as HTMLFormElement).reset();
     } catch (error) {
@@ -206,12 +220,19 @@ class BitcoinWallet {
     this.wallets = this.wallets.filter(w => w.address !== wallet.address);
     this.wallets.push(wallet);
     this.saveWallets();
+    this.populateWalletSelector(); // Update dropdown when wallet is added
   }
 
   private setCurrentWallet(wallet: Wallet) {
     this.currentWallet = wallet;
     this.updateWalletDisplay();
     this.loadTransactionHistory();
+    
+    // Sync the wallet selector dropdown
+    const walletSelector = document.getElementById('wallet-selector') as HTMLSelectElement;
+    if (walletSelector) {
+      walletSelector.value = wallet.address;
+    }
   }
 
   private updateWalletDisplay() {
@@ -337,6 +358,7 @@ class BitcoinWallet {
       this.currentWallet.balance = balanceInfo.balance;
       this.updateWalletDisplay();
       this.saveWallets();
+      this.populateWalletSelector(); // Update dropdown with new balance
     } catch (error) {
       this.showError('Failed to refresh balance');
     } finally {
@@ -391,9 +413,31 @@ class BitcoinWallet {
     const stored = localStorage.getItem('bitcoin-wallets');
     if (stored) {
       this.wallets = JSON.parse(stored);
+      this.populateWalletSelector();
       if (this.wallets.length > 0) {
         this.setCurrentWallet(this.wallets[0]);
       }
+    }
+  }
+
+  private populateWalletSelector() {
+    const walletSelector = document.getElementById('wallet-selector') as HTMLSelectElement;
+    if (!walletSelector) return;
+
+    // Clear existing options except the first one
+    walletSelector.innerHTML = '<option value="">Choose a wallet...</option>';
+
+    // Add all wallets to the dropdown
+    this.wallets.forEach(wallet => {
+      const option = document.createElement('option');
+      option.value = wallet.address;
+      option.textContent = `${wallet.name} (${wallet.address.slice(0, 10)}...${wallet.address.slice(-6)}) - ${wallet.balance.toLocaleString()} sats`;
+      walletSelector.appendChild(option);
+    });
+
+    // Select current wallet in dropdown if one is active
+    if (this.currentWallet) {
+      walletSelector.value = this.currentWallet.address;
     }
   }
 

@@ -347,8 +347,51 @@
         }
 
         @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            
+            .container {
+                padding: 15px;
+                border-radius: 10px;
+            }
+            
+            .header h1 {
+                font-size: 1.8rem;
+            }
+            
             .htlc-grid {
                 grid-template-columns: 1fr;
+                gap: 15px;
+            }
+            
+            .htlc-section {
+                padding: 15px;
+            }
+            
+            .htlc-tabs {
+                flex-wrap: wrap;
+                justify-content: space-around;
+            }
+            
+            .tab-btn {
+                padding: 8px 12px;
+                font-size: 14px;
+                margin: 2px;
+                min-width: 120px;
+            }
+            
+            .step-number {
+                width: 24px;
+                height: 24px;
+                font-size: 12px;
+            }
+            
+            .nav-links a {
+                display: block;
+                margin: 5px 0;
+                padding: 12px 20px;
+                font-size: 14px;
             }
             
             .input-with-button {
@@ -357,6 +400,59 @@
             
             .input-with-button input {
                 margin-bottom: 10px;
+            }
+            
+            .form-group input, .form-group select, .form-group textarea {
+                padding: 15px;
+                font-size: 16px;
+            }
+            
+            .btn {
+                padding: 15px 20px;
+                font-size: 16px;
+                margin-bottom: 10px;
+                white-space: nowrap;
+            }
+            
+            .btn-secondary {
+                padding: 8px 12px;
+                font-size: 12px !important;
+            }
+            
+            .result-section {
+                padding: 15px;
+            }
+            
+            .result-item {
+                padding: 10px;
+            }
+            
+            .result-value {
+                padding: 8px;
+                font-size: 12px;
+                word-break: break-all;
+            }
+            
+            .qr-display {
+                padding: 15px;
+            }
+            
+            .qr-display canvas {
+                max-width: 150px;
+                height: auto;
+            }
+            
+            .network-status {
+                font-size: 14px;
+                padding: 8px;
+            }
+            
+            #toast {
+                bottom: 10px;
+                right: 10px;
+                left: 10px;
+                padding: 12px;
+                font-size: 14px;
             }
         }
     </style>
@@ -375,7 +471,7 @@
 
         <div id="network-status" class="network-status">Checking network status...</div>
 
-        <!-- Wallet Overview Section -->
+        <!-- Wallet Overview Section
         <div class="htlc-section" id="wallet-overview">
             <h2>📱 Available Wallets</h2>
             <div id="wallet-list" class="htlc-grid">
@@ -392,7 +488,7 @@
             <strong>⚠️ REAL BITCOIN TESTNET MODE</strong><br>
             This application creates actual Bitcoin testnet transactions that will be broadcast to the Bitcoin network. 
             Testnet Bitcoin has no monetary value but requires real network interaction.
-        </div>
+        </div> -->
 
         <div class="htlc-tabs">
             <button class="tab-btn active" data-tab="sender">
@@ -474,10 +570,10 @@
                         </div>
                     </div>
                     
-                    <button type="button" class="btn btn-secondary" id="test-form-btn" style="margin-bottom: 10px;">🧪 Test Form</button>
+                    <!-- <button type="button" class="btn btn-secondary" id="test-form-btn" style="margin-bottom: 10px;">🧪 Test Form</button>
                     <button type="button" class="btn btn-secondary" id="fill-test-data-btn" style="margin-bottom: 10px;">📝 Fill Test Data</button>
                     <button type="button" class="btn btn-secondary" id="debug-wallets-btn" style="margin-bottom: 10px;">🔍 Debug Wallets</button>
-                    <button type="button" class="btn btn-secondary" id="refresh-balances-btn" style="margin-bottom: 10px;">💰 Refresh Balances</button>
+                    <button type="button" class="btn btn-secondary" id="refresh-balances-btn" style="margin-bottom: 10px;">💰 Refresh Balances</button> -->
                     <button type="submit" class="btn btn-success">Create HTLC Funding Transaction</button>
                 </form>
                 
