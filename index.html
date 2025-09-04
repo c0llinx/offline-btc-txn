@@ -631,6 +631,21 @@
                         <button class="btn btn-secondary" id="scan-qr-btn" style="margin-bottom: 10px;">📱 Scan QR Code</button>
                         <button class="btn btn-secondary" id="paste-data-btn">📋 Paste HTLC Data</button>
                         
+                        <!-- Camera scanner UI -->
+                        <div id="qr-scanner" class="hidden" style="margin: 20px 0;">
+                            <div style="text-align: center; margin-bottom: 10px;">
+                                <h4>QR Code Scanner</h4>
+                                <p style="color: #6c757d; font-size: 14px;">Position QR code within the camera view</p>
+                            </div>
+                            <video id="qr-video" style="width: 100%; max-width: 400px; height: auto; border: 2px solid #0d6efd; border-radius: 8px; margin: 0 auto; display: block;"></video>
+                            <canvas id="qr-canvas" class="hidden"></canvas>
+                            <div style="text-align: center; margin-top: 15px;">
+                                <button id="start-scan-btn" class="btn btn-success" style="margin: 5px;">▶️ Start Scanning</button>
+                                <button id="stop-scan-btn" class="btn btn-danger" style="margin: 5px; display: none;">⏹️ Stop Scanning</button>
+                            </div>
+                            <div id="scan-result" style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 5px; font-family: monospace; font-size: 12px; display: none;"></div>
+                        </div>
+                        
                         <div id="htlc-data-display" class="result-section hidden">
                             <h4>HTLC Contract Details</h4>
                             <div id="htlc-info"></div>
@@ -762,6 +777,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
     <script>
         // Check QRious library loading
         document.addEventListener('DOMContentLoaded', () => {
@@ -826,6 +842,10 @@
             // Action buttons
             document.getElementById('scan-qr-btn')?.addEventListener('click', scanQRCode);
             document.getElementById('paste-data-btn')?.addEventListener('click', pasteHTLCData);
+            
+            // Camera scanner controls
+            document.getElementById('start-scan-btn')?.addEventListener('click', startScanning);
+            document.getElementById('stop-scan-btn')?.addEventListener('click', stopScanning);
             document.getElementById('load-refund-data-btn')?.addEventListener('click', loadRefundData);
             document.getElementById('refresh-wallets-btn')?.addEventListener('click', refreshWallets);
             
@@ -1597,17 +1617,171 @@
             document.getElementById('refund-tx-link').textContent = result.txid;
         }
 
-        function scanQRCode() {
-            showToast('📱 QR scanner would open here', 'info');
-            // In a real implementation, this would open camera/QR scanner
+        // Camera QR scanning implementation
+        let videoStream = null;
+        let isScanning = false;
+
+        async function scanQRCode() {
+            console.log('Scan QR Code clicked - starting camera');
+            
+            const scannerDiv = document.getElementById('qr-scanner');
+            const startBtn = document.getElementById('start-scan-btn');
+            const stopBtn = document.getElementById('stop-scan-btn');
+            
+            if (!scannerDiv || !startBtn || !stopBtn) {
+                console.error('QR scanner elements not found');
+                if (confirm('Camera scanner not available. Click OK to paste HTLC data manually.')) {
+                    pasteHTLCData();
+                }
+                return;
+            }
+            
+            if (isScanning) {
+                stopScanning();
+                return;
+            }
+            
+            try {
+                scannerDiv.classList.remove('hidden');
+                await startScanning();
+            } catch (error) {
+                console.error('Failed to start camera:', error);
+                showToast('Camera access failed: ' + error.message + '. Please try pasting HTLC data manually.', 'error');
+                scannerDiv.classList.add('hidden');
+                pasteHTLCData();
+            }
+        }
+
+        async function startScanning() {
+            try {
+                const constraints = {
+                    video: {
+                        facingMode: 'environment', // Use back camera on mobile
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                };
+                
+                videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+                const video = document.getElementById('qr-video');
+                
+                if (!video) {
+                    throw new Error('Video element not found');
+                }
+                
+                video.srcObject = videoStream;
+                video.play();
+                
+                isScanning = true;
+                document.getElementById('start-scan-btn').style.display = 'none';
+                document.getElementById('stop-scan-btn').style.display = 'inline-block';
+                
+                // Start QR detection
+                requestAnimationFrame(scanFrame);
+                
+            } catch (error) {
+                throw new Error('Camera not accessible: ' + error.message);
+            }
+        }
+
+        function stopScanning() {
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+                videoStream = null;
+            }
+            
+            isScanning = false;
+            document.getElementById('qr-scanner').classList.add('hidden');
+            document.getElementById('start-scan-btn').style.display = 'inline-block';
+            document.getElementById('stop-scan-btn').style.display = 'none';
+        }
+
+        function scanFrame() {
+            if (!isScanning) return;
+            
+            const video = document.getElementById('qr-video');
+            const canvas = document.getElementById('qr-canvas');
+            const ctx = canvas.getContext('2d');
+            
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                
+                if (window.jsQR) {
+                    const code = window.jsQR(imageData.data, imageData.width, imageData.height);
+                    
+                    if (code) {
+                        console.log('QR Code detected:', code.data);
+                        handleScannedQRCode(code.data);
+                        return; // Stop scanning
+                    }
+                }
+            }
+            
+            requestAnimationFrame(scanFrame);
+        }
+
+        function handleScannedQRCode(qrData) {
+            stopScanning();
+            
+            try {
+                // Try to parse as JSON first
+                const parsedData = JSON.parse(qrData);
+                
+                if (parsedData.txid && parsedData.vout !== undefined && parsedData.value) {
+                    console.log('Valid HTLC data detected:', parsedData);
+                    htlcData = parsedData;
+                    
+                    // Auto-select receiver wallet if available
+                    const receiverWallets = getWalletsFromStorage();
+                    if (receiverWallets && receiverWallets.length > 0) {
+                        autoSelectReceiverWallet(receiverWallets);
+                    }
+                    
+                    showToast('QR Code scanned successfully! HTLC data loaded.', 'success');
+                    updateClaimDisplay();
+                } else {
+                    showToast('QR code contains data but not valid HTLC format. Please scan a valid HTLC QR code.', 'error');
+                }
+            } catch (error) {
+                // If not JSON, treat as plain text
+                console.log('QR code contains non-JSON data:', qrData);
+                showToast('QR code scanned but contains invalid data format. Expected HTLC JSON data.', 'error');
+            }
+        }
+        
+        function updateClaimDisplay() {
+            if (!htlcData) return;
+            
+            const htlcDisplay = document.getElementById('htlc-data-display');
+            if (!htlcDisplay) return;
+            
+            htlcDisplay.classList.remove('hidden');
+            htlcDisplay.innerHTML = `
+                <h4>HTLC Contract Details</h4>
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #28a745;">
+                    <p><strong>Transaction ID:</strong> ${htlcData.txid}</p>
+                    <p><strong>Output Index:</strong> ${htlcData.vout}</p>
+                    <p><strong>Amount:</strong> ${(htlcData.value || htlcData.amount).toLocaleString()} satoshis</p>
+                    <p><strong>Contract Address:</strong> ${htlcData.receiverAddress || htlcData.taprootAddress || 'N/A'}</p>
+                    <p><strong>Refund Locktime:</strong> Block ${htlcData.refundTimeLock}</p>
+                    ${htlcData.preimage ? `<p><strong>Preimage:</strong> ${htlcData.preimage.slice(0, 20)}...</p>` : ''}
+                </div>
+            `;
         }
 
         function pasteHTLCData() {
             const pastedData = prompt('Paste HTLC transaction data (JSON):');
-            if (pastedData) {
+            if (pastedData && pastedData.trim()) {
                 try {
-                    htlcData = JSON.parse(pastedData);
-                    displayHTLCData();
+                    console.log('Pasted HTLC data:', pastedData);
+                    htlcData = JSON.parse(pastedData.trim());
+                    console.log('Parsed HTLC data:', htlcData);
+                    
+                    updateClaimDisplay();
                     
                     // Auto-select receiver wallet if it exists in saved wallets
                     if (htlcData.receiverWallet) {
@@ -1618,14 +1792,24 @@
                         if (matchingOption) {
                             receiverSelect.value = matchingOption.value;
                             document.getElementById('claim-address').value = htlcData.receiverWallet.address;
+                            showToast(`🎯 Auto-selected receiver wallet: ${htlcData.receiverWallet.name}`);
                         }
                     }
                     
+                    // For manual address mode, set the claim address to the receiver address from HTLC data
+                    if (htlcData.receiverAddress && !htlcData.receiverWallet) {
+                        document.getElementById('claim-address').value = htlcData.receiverAddress;
+                        showToast('📋 Set claim address from HTLC data');
+                    }
+                    
                     document.getElementById('receiver-form').classList.remove('hidden');
-                    showToast('✅ HTLC data loaded');
+                    showToast('✅ HTLC data loaded successfully');
                 } catch (error) {
-                    showError('Invalid HTLC data format. Expected JSON.');
+                    console.error('Parse error:', error);
+                    showError('Invalid HTLC data format. Please ensure it\'s valid JSON from the HTLC creation step.');
                 }
+            } else if (pastedData !== null) {
+                showError('No data pasted. Please copy the HTLC data first.');
             }
         }
 
