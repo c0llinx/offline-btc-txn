@@ -28,3 +28,9 @@ Tx Data (QR Code A)
   timelock expires.
 
   P2WPKH stands for Pay-to-Witness-Public-Key-Hash
+
+   💰 Funding Required:
+  The sender address tb1qgv2zmd4hj3wf05sl48x0wwnht8djj0mf8lp3ry needs testnet Bitcoin. Visit:
+  - https://testnet-faucet.mempool.co/
+  - https://bitcoinfaucet.uo1.net/
+  - https://coinfaucet.eu/en/btc-testnet/

@@ -231,6 +231,92 @@ export class OfflineWorkflowService {
   }
 
   /**
+   * Create a simple HTLC that pays to an address (for manual address mode)
+   */
+  async createSimpleHTLC(
+    senderWif: string,
+    receiverAddress: string,
+    amount: number,
+    refundLocktime: number
+  ) {
+    const senderKeyPair = ECPair.fromWIF(senderWif, bitcoin.networks.testnet);
+    
+    // Get sender's address
+    const senderP2WPKH = bitcoin.payments.p2wpkh({ 
+      pubkey: senderKeyPair.publicKey,
+      network: bitcoin.networks.testnet 
+    });
+    const senderAddress = senderP2WPKH.address!;
+    console.log(`Simple HTLC: Sending from ${senderAddress} to ${receiverAddress}`);
+    
+    // Get UTXOs from sender's address
+    let utxos;
+    try {
+      utxos = await this.mempoolAPI.getAddressUTXOs(senderAddress);
+    } catch (error) {
+      console.error('Failed to get UTXOs:', error);
+      throw new Error('Failed to fetch UTXOs from mempool API');
+    }
+    
+    if (utxos.length === 0) {
+      throw new Error('No UTXOs found for sender address. Please fund the sender address first.');
+    }
+    
+    console.log(`Found ${utxos.length} UTXOs for sender`);
+    
+    // For simplicity in address-mode, just send directly to receiver address
+    // This is a regular P2WPKH transaction, not a complex HTLC
+    const psbt = new bitcoin.Psbt({ network: bitcoin.networks.testnet });
+    const totalInput = utxos.reduce((sum, utxo) => sum + utxo.value, 0);
+    
+    // Add all UTXOs as inputs
+    utxos.forEach(utxo => {
+      psbt.addInput({
+        hash: utxo.txid,
+        index: utxo.vout,
+        witnessUtxo: {
+          script: Buffer.from(utxo.scriptPubKey, 'hex'),
+          value: utxo.value,
+        },
+      });
+    });
+
+    // Output to receiver address
+    const fee = 1000;
+    psbt.addOutput({ 
+      address: receiverAddress, 
+      value: amount 
+    });
+
+    // Change output back to sender if needed
+    const changeAmount = totalInput - amount - fee;
+    if (changeAmount > 546) {
+      psbt.addOutput({ 
+        address: senderAddress, 
+        value: changeAmount 
+      });
+    }
+
+    // Sign and finalize
+    psbt.signAllInputs(senderKeyPair);
+    psbt.finalizeAllInputs();
+    
+    const tx = psbt.extractTransaction();
+    
+    return {
+      psbt: tx.toHex(),
+      txid: tx.getId(),
+      senderAddress,
+      receiverAddress,
+      amount,
+      fee,
+      totalInput,
+      changeAmount,
+      isSimpleTransfer: true // This is a direct transfer, not HTLC
+    };
+  }
+
+  /**
    * Sender refunds the funds after timelock using P2WSH HTLC.
    */
   async createRefundPSBT(

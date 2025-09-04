@@ -3,30 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Offline Bitcoin Transaction Workflow</title>
+    <title>Bitcoin HTLC Contracts</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f5f5f5;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
             color: #333;
-            line-height: 1.6;
         }
 
         .container {
-            max-width: 1000px;
+            max-width: 1200px;
             margin: 0 auto;
-            padding: 20px;
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
         }
 
         .header {
             text-align: center;
             margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #f0f0f0;
         }
 
         .header h1 {
@@ -35,335 +36,189 @@
             margin-bottom: 10px;
         }
 
-        .header .subtitle {
-            color: #666;
-            font-size: 1.1rem;
-        }
-
-        .network-status {
+        .nav-links {
             text-align: center;
-            padding: 10px;
+            margin-bottom: 30px;
+        }
+
+        .nav-links a {
+            display: inline-block;
+            padding: 10px 20px;
+            margin: 0 10px;
+            background: #6c757d;
+            color: white;
+            text-decoration: none;
             border-radius: 5px;
-            margin-bottom: 20px;
-            font-weight: bold;
+            transition: background-color 0.3s;
         }
 
-        .network-status.healthy {
-            background-color: #d4edda;
-            color: #155724;
+        .nav-links a:hover {
+            background: #5a6268;
         }
 
-        .network-status.unhealthy {
-            background-color: #f8d7da;
-            color: #721c24;
+        .nav-links a.active {
+            background: #0d6efd;
         }
 
         .warning-box {
             background-color: #fff3cd;
             color: #856404;
             padding: 20px;
-            border-radius: 5px;
-            border-left: 4px solid #ffc107;
-            margin-bottom: 20px;
+            border-radius: 10px;
+            border-left: 5px solid #ffc107;
+            margin-bottom: 30px;
         }
 
-        .calculator-section {
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        .htlc-tabs {
+            display: flex;
             margin-bottom: 20px;
+            border-bottom: 2px solid #e9ecef;
         }
 
-        .funding-section {
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
+        .tab-btn {
+            padding: 10px 20px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            color: #6c757d;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .tab-btn.active {
+            color: #0d6efd;
+            border-bottom-color: #0d6efd;
+            font-weight: 600;
+        }
+
+        .tab-content {
             display: none;
         }
 
-        .section-title {
-            color: #0d6efd;
-            font-size: 1.5rem;
-            margin-bottom: 20px;
-            border-bottom: 2px solid #0d6efd;
-            padding-bottom: 10px;
+        .tab-content.active {
+            display: block;
         }
 
-        .input-group {
-            display: flex;
-            gap: 15px;
-            align-items: center;
+        .htlc-section {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 10px;
+            border: 1px solid #e9ecef;
             margin-bottom: 20px;
         }
 
-        .input-group label {
-            min-width: 100px;
-            font-weight: bold;
+        .htlc-section h2 {
+            color: #495057;
+            margin-bottom: 20px;
+            font-size: 1.4rem;
         }
 
-        input[type="number"] {
-            flex: 1;
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
             padding: 12px;
-            border: 2px solid #ddd;
-            border-radius: 5px;
-            font-size: 16px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 14px;
             transition: border-color 0.3s;
         }
 
-        input[type="number"]:focus {
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
             outline: none;
             border-color: #0d6efd;
         }
 
-        .operations {
+        .input-with-button {
             display: flex;
-            gap: 15px;
-            justify-content: center;
-            margin-bottom: 20px;
+            gap: 10px;
+            align-items: flex-end;
         }
 
-        .op-btn {
-            background-color: #0d6efd;
-            color: white;
-            border: none;
-            padding: 15px 20px;
-            border-radius: 5px;
-            font-size: 18px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.3s;
-            min-width: 60px;
-        }
-
-        .op-btn:hover {
-            background-color: #0b5ed7;
-            transform: translateY(-2px);
-        }
-
-        .op-btn.selected {
-            background-color: #0a58ca;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-        }
-
-        .button-group {
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-            margin-top: 20px;
+        .input-with-button input {
+            flex: 1;
         }
 
         .btn {
-            padding: 12px 24px;
+            background: #0d6efd;
+            color: white;
             border: none;
-            border-radius: 5px;
-            font-size: 16px;
-            font-weight: bold;
+            padding: 12px 24px;
+            border-radius: 8px;
             cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
             transition: all 0.3s;
+            width: 100%;
         }
 
-        .btn-primary {
-            background-color: #28a745;
-            color: white;
-        }
-
-        .btn-primary:hover {
-            background-color: #218838;
-        }
-
-        .btn-secondary {
-            background-color: #6c757d;
-            color: white;
-        }
-
-        .btn-secondary:hover {
-            background-color: #545b62;
+        .btn:hover {
+            background: #0b5ed7;
+            transform: translateY(-2px);
         }
 
         .btn:disabled {
-            background-color: #ccc;
+            background: #6c757d;
             cursor: not-allowed;
             transform: none;
         }
 
-        .calc-btn {
-            background-color: #28a745;
-            color: white;
-            padding: 15px 30px;
-            font-size: 18px;
-            font-weight: bold;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: all 0.3s;
+        .btn-secondary {
+            background: #6c757d;
+            min-width: auto;
+            width: auto;
         }
 
-        .calc-btn:hover:not(:disabled) {
-            background-color: #218838;
-            transform: translateY(-2px);
+        .btn-secondary:hover {
+            background: #5a6268;
         }
 
-        .calc-btn:disabled {
-            background-color: #ccc;
-            cursor: not-allowed;
+        .btn-success {
+            background: #198754;
         }
 
-        .address-display {
-            font-family: monospace;
-            background-color: #f8f9fa;
-            padding: 15px;
-            border-radius: 5px;
-            word-break: break-all;
-            border: 1px solid #dee2e6;
-            margin: 10px 0;
+        .btn-success:hover {
+            background: #157347;
         }
 
-        .funding-status {
-            padding: 10px;
-            border-radius: 5px;
-            margin: 10px 0;
-            font-weight: bold;
+        .btn-danger {
+            background: #dc3545;
         }
 
-        .funding-status.success {
-            background-color: #d4edda;
-            color: #155724;
+        .btn-danger:hover {
+            background: #bb2d3b;
         }
 
-        .funding-status.warning {
-            background-color: #fff3cd;
-            color: #856404;
-        }
-
-        .funding-status.error {
-            background-color: #f8d7da;
-            color: #721c24;
-        }
-
-        .funding-status.info {
-            background-color: #d1ecf1;
-            color: #0c5460;
-        }
-
-        .faucet-links {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 10px;
-            margin: 15px 0;
-        }
-
-        .faucet-link {
-            background: #007bff;
-            color: white;
-            padding: 10px 15px;
-            text-decoration: none;
-            border-radius: 5px;
-            text-align: center;
-            transition: background-color 0.3s;
-        }
-
-        .faucet-link:hover {
-            background: #0056b3;
-            color: white;
-        }
-
-        .saved-addresses-list {
-            display: grid;
-            gap: 15px;
-        }
-
-        .saved-address-item {
-            background: #f8f9fa;
-            border: 2px solid #dee2e6;
-            border-radius: 8px;
-            padding: 15px;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        .saved-address-item:hover {
-            border-color: #0d6efd;
-            background: #fff8f0;
-        }
-
-        .saved-address-item.selected {
-            border-color: #0d6efd;
-            background: #fff8f0;
-            box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.2);
-        }
-
-        .saved-address-item.matching {
-            border-color: #007bff;
-            background: #f0f8ff;
-        }
-
-        .saved-address-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-
-        .saved-address-calculation {
-            font-size: 1.1rem;
-            font-weight: bold;
-            color: #0d6efd;
-        }
-
-        .saved-address-balance {
-            font-weight: bold;
-            padding: 5px 10px;
-            border-radius: 15px;
-            font-size: 0.9rem;
-        }
-
-        .saved-address-balance.funded {
-            background: #d4edda;
-            color: #155724;
-        }
-
-        .saved-address-balance.unfunded {
-            background: #f8d7da;
-            color: #721c24;
-        }
-
-        .saved-address-details {
-            font-family: monospace;
-            font-size: 0.85rem;
-            color: #666;
-        }
-
-        .address-info {
-            border: 2px solid #dee2e6;
-            border-radius: 8px;
+        .result-section {
+            background: #e7f3ff;
             padding: 20px;
-            margin-bottom: 20px;
-        }
-
-        .results {
-            background: white;
-            padding: 30px;
             border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-            display: none;
+            margin-top: 20px;
+            border-left: 5px solid #0d6efd;
         }
 
         .result-item {
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             padding: 15px;
-            background: #f8f9fa;
-            border-radius: 5px;
-            border-left: 4px solid #0d6efd;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
         }
 
         .result-label {
-            font-weight: bold;
-            color: #666;
-            margin-bottom: 8px;
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 5px;
             font-size: 0.9rem;
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -373,101 +228,107 @@
             font-family: monospace;
             word-break: break-all;
             padding: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            border: 1px solid #e9ecef;
+        }
+
+        .qr-display {
+            text-align: center;
+            padding: 20px;
             background: white;
-            border-radius: 3px;
+            border-radius: 8px;
+            margin: 15px 0;
             border: 1px solid #dee2e6;
         }
 
-        .result-value.large-text {
-            font-size: 1.2rem;
-            font-weight: bold;
+        .success {
+            background: #d1e7dd;
+            color: #0f5132;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 1px solid #badbcc;
         }
 
-        .tx-link {
-            color: #007bff;
-            text-decoration: none;
-            font-weight: bold;
-        }
-
-        .tx-link:hover {
-            text-decoration: underline;
-        }
-
-        .broadcast-status {
-            padding: 10px;
-            border-radius: 5px;
-            font-weight: bold;
-        }
-
-        .broadcast-status.success {
-            background-color: #d4edda;
-            color: #155724;
-        }
-
-        .broadcast-status.failed {
-            background-color: #f8d7da;
+        .error {
+            background: #f8d7da;
             color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 1px solid #f5c6cb;
         }
 
         .loading {
             text-align: center;
-            color: #666;
-            font-style: italic;
+            color: #0d6efd;
+            font-weight: bold;
             padding: 20px;
+        }
+
+        .hidden {
             display: none;
         }
 
-        .error {
-            background-color: #f8d7da;
-            color: #721c24;
-            padding: 15px;
-            border-radius: 5px;
-            margin: 20px 0;
-            display: none;
-            border-left: 4px solid #dc3545;
-        }
-
-        .status-text {
+        .network-status {
             text-align: center;
-            margin: 10px 0;
-            font-style: italic;
-            color: #666;
-            display: none;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: bold;
         }
 
-        .instructions {
-            background-color: #e9ecef;
-            padding: 20px;
-            border-radius: 5px;
-            margin: 15px 0;
-            white-space: pre-line;
-            font-family: monospace;
-            font-size: 0.9rem;
-            line-height: 1.4;
+        .network-status.healthy {
+            background: #d1e7dd;
+            color: #0f5132;
         }
 
-        @media (max-width: 768px) {
-            .container {
-                padding: 10px;
-            }
-
-            .operations {
-                flex-wrap: wrap;
-            }
-
-            .button-group {
-                flex-direction: column;
-            }
-
-            .faucet-links {
-                grid-template-columns: 1fr;
-            }
+        .network-status.unhealthy {
+            background: #f8d7da;
+            color: #721c24;
         }
-      .results-hidden { display:none; }
-  .form-hidden { display:none; }
-  /* Hide legacy arithmetic UI */
-  .calculator-section, #saved-addresses-section, #funding-section { display:none !important; }
-        /* Toast Notifications */
+
+        .htlc-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-indicator.pending {
+            background: #ffc107;
+        }
+
+        .status-indicator.active {
+            background: #198754;
+        }
+
+        .status-indicator.completed {
+            background: #6c757d;
+        }
+
+        .step-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 30px;
+            height: 30px;
+            background: #0d6efd;
+            color: white;
+            border-radius: 50%;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
         #toast {
             position: fixed;
             bottom: 20px;
@@ -479,172 +340,1291 @@
             opacity: 0;
             transition: opacity 0.4s ease;
             z-index: 9999;
-            pointer-events: none;
         }
+
         #toast.show {
             opacity: 0.95;
         }
-</style>
+
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            
+            .container {
+                padding: 15px;
+                border-radius: 10px;
+            }
+            
+            .header h1 {
+                font-size: 1.8rem;
+            }
+            
+            .htlc-grid {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+            
+            .htlc-section {
+                padding: 15px;
+            }
+            
+            .htlc-tabs {
+                flex-wrap: wrap;
+                justify-content: space-around;
+            }
+            
+            .tab-btn {
+                padding: 8px 12px;
+                font-size: 14px;
+                margin: 2px;
+                min-width: 120px;
+            }
+            
+            .step-number {
+                width: 24px;
+                height: 24px;
+                font-size: 12px;
+            }
+            
+            .nav-links a {
+                display: block;
+                margin: 5px 0;
+                padding: 12px 20px;
+                font-size: 14px;
+            }
+            
+            .input-with-button {
+                flex-direction: column;
+            }
+            
+            .input-with-button input {
+                margin-bottom: 10px;
+            }
+            
+            .form-group input, .form-group select, .form-group textarea {
+                padding: 15px;
+                font-size: 16px;
+            }
+            
+            .btn {
+                padding: 15px 20px;
+                font-size: 16px;
+                margin-bottom: 10px;
+                white-space: nowrap;
+            }
+            
+            .btn-secondary {
+                padding: 8px 12px;
+                font-size: 12px !important;
+            }
+            
+            .result-section {
+                padding: 15px;
+            }
+            
+            .result-item {
+                padding: 10px;
+            }
+            
+            .result-value {
+                padding: 8px;
+                font-size: 12px;
+                word-break: break-all;
+            }
+            
+            .qr-display {
+                padding: 15px;
+            }
+            
+            .qr-display canvas {
+                max-width: 150px;
+                height: auto;
+            }
+            
+            .network-status {
+                font-size: 14px;
+                padding: 8px;
+            }
+            
+            #toast {
+                bottom: 10px;
+                right: 10px;
+                left: 10px;
+                padding: 12px;
+                font-size: 14px;
+            }
+        }
+    </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>Offline Bitcoin Transactions</h1>
-            <p class="subtitle">Air-gapped Taproot workflow: create, claim, and refund securely via QR codes</p>
+            <h1>⚡ Bitcoin HTLC Contracts</h1>
+            <p class="subtitle">Hash Time Locked Contracts for secure offline Bitcoin transactions</p>
         </div>
 
-        <div style="text-align: center; margin-bottom: 30px;">
-            <a href="wallet.html" style="display: inline-block; padding: 10px 20px; margin: 0 10px; background: #6c757d; color: white; text-decoration: none; border-radius: 5px; transition: background-color 0.3s;">Bitcoin Wallet</a>
-            <a href="index.html" style="display: inline-block; padding: 10px 20px; margin: 0 10px; background: #0d6efd; color: white; text-decoration: none; border-radius: 5px;">HTLC Contracts</a>
+        <div class="nav-links">
+            <a href="wallet.html">Wallet</a>
+            <a href="index.html" class="active">HTLC Contracts</a>
         </div>
 
         <div id="network-status" class="network-status">Checking network status...</div>
 
+        <!-- Wallet Overview Section
+        <div class="htlc-section" id="wallet-overview">
+            <h2>📱 Available Wallets</h2>
+            <div id="wallet-list" class="htlc-grid">
+                <div id="no-wallets-message" style="grid-column: 1 / -1; text-align: center; color: #6c757d;">
+                    <p>No wallets found. <a href="wallet.html" style="color: #0d6efd;">Create wallets first →</a></p>
+                </div>
+            </div>
+            <div style="text-align: center; margin-top: 15px;">
+                <button class="btn btn-secondary" id="refresh-wallets-btn">🔄 Refresh Wallets</button>
+            </div>
+        </div>
+
         <div class="warning-box">
             <strong>⚠️ REAL BITCOIN TESTNET MODE</strong><br>
             This application creates actual Bitcoin testnet transactions that will be broadcast to the Bitcoin network. 
-            Testnet Bitcoin has no monetary value but requires real network interaction. 
-            Make sure you understand the process before proceeding.
+            Testnet Bitcoin has no monetary value but requires real network interaction.
+        </div> -->
+
+        <div class="htlc-tabs">
+            <button class="tab-btn active" data-tab="sender">
+                <span class="step-number">1</span>
+                Create HTLC
+            </button>
+            <button class="tab-btn" data-tab="receiver">
+                <span class="step-number">2</span>
+                Claim Funds
+            </button>
+            <button class="tab-btn" data-tab="refund">
+                <span class="step-number">3</span>
+                Refund (Timeout)
+            </button>
         </div>
 
-        <div class="calculator-section">
-            <h2 class="section-title">🧮 Arithmetic Calculation</h2>
-            
-            <div class="input-group">
-                <label>Number 1:</label>
-                <input type="number" id="num1" value="10" step="1">
-            </div>
-            
-            <div class="input-group">
-                <label>Number 2:</label>
-                <input type="number" id="num2" value="5" step="1">
-            </div>
-            
-            <div class="operations">
-                <button class="op-btn" data-op="add">+</button>
-                <button class="op-btn" data-op="subtract">−</button>
-                <button class="op-btn" data-op="multiply">×</button>
-                <button class="op-btn" data-op="divide">÷</button>
-            </div>
-
-            <div id="calculation-status" class="status-text"></div>
-            
-            <div class="button-group">
-                <button class="btn btn-secondary" id="generateAddressBtn">Generate Funding Address</button>
-                <button class="calc-btn" id="calculateBtn" disabled>Calculate & Create Real Transaction</button>
+        <!-- Sender Tab -->
+        <div id="sender-tab" class="tab-content active">
+            <div class="htlc-section">
+                <h2>
+                    <span class="status-indicator pending" id="sender-status"></span>
+                    Create Hash Time Locked Contract
+                </h2>
+                <form id="sender-form">
+                    <div class="htlc-grid">
+                        <div>
+                            <div class="form-group">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                    <label>Sender Wallet:</label>
+                                    <button type="button" class="btn btn-secondary" id="toggle-sender-input" style="font-size: 12px; padding: 5px 10px; width: auto;">Manual Input</button>
+                                </div>
+                                
+                                <div id="sender-wallet-dropdown">
+                                    <select id="sender-wallet-select" name="sender-wallet">
+                                        <option value="">Select sender wallet...</option>
+                                    </select>
+                                    <small style="color: #6c757d; display: block; margin-top: 5px;">
+                                        <a href="wallet.html" style="color: #0d6efd;">Create wallets in Wallet page →</a>
+                                    </small>
+                                </div>
+                                
+                                <div id="sender-manual-input" class="hidden">
+                                    <input type="text" id="sender-wif-manual" placeholder="Paste sender private key (WIF)..." style="margin-bottom: 10px;">
+                                    <small style="color: #6c757d;">Enter WIF format private key (starts with 'c' for testnet)</small>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                    <label>Receiver:</label>
+                                    <button type="button" class="btn btn-secondary" id="toggle-receiver-input" style="font-size: 12px; padding: 5px 10px; width: auto;">Manual Input</button>
+                                </div>
+                                
+                                <div id="receiver-wallet-dropdown">
+                                    <select id="receiver-wallet-select" name="receiver-wallet">
+                                        <option value="">Select receiver wallet...</option>
+                                    </select>
+                                    <small style="color: #6c757d;">Receiver's public key will be used for HTLC script</small>
+                                </div>
+                                
+                                <div id="receiver-manual-input" class="hidden">
+                                    <input type="text" id="receiver-address-manual" placeholder="Paste receiver address (tb1...)..." style="margin-bottom: 10px;">
+                                    <small style="color: #6c757d;">Enter testnet address (starts with 'tb1')</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <div class="form-group">
+                                <label>Amount (Satoshis):</label>
+                                <input type="number" name="amount" value="50000" min="1000" placeholder="50000" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Refund Timelock (Block Height):</label>
+                                <input type="number" name="refund-locktime" id="refund-locktime-input" placeholder="4657600" required>
+                                <small style="color: #6c757d;">Current block: <span id="current-block">Loading...</span></small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- <button type="button" class="btn btn-secondary" id="test-form-btn" style="margin-bottom: 10px;">🧪 Test Form</button>
+                    <button type="button" class="btn btn-secondary" id="fill-test-data-btn" style="margin-bottom: 10px;">📝 Fill Test Data</button>
+                    <button type="button" class="btn btn-secondary" id="debug-wallets-btn" style="margin-bottom: 10px;">🔍 Debug Wallets</button>
+                    <button type="button" class="btn btn-secondary" id="refresh-balances-btn" style="margin-bottom: 10px;">💰 Refresh Balances</button> -->
+                    <button type="submit" class="btn btn-success">Create HTLC Funding Transaction</button>
+                </form>
+                
+                <div id="sender-results" class="result-section hidden">
+                    <h3>🎯 HTLC Created Successfully</h3>
+                    <div class="htlc-grid">
+                        <div>
+                            <div class="result-item">
+                                <div class="result-label">HTLC Contract Address</div>
+                                <div class="result-value" id="htlc-address"></div>
+                            </div>
+                            <div class="result-item">
+                                <div class="result-label">Secret Preimage</div>
+                                <div class="result-value" id="preimage-display"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="result-item">
+                                <div class="result-label">Funding Transaction</div>
+                                <div class="result-value">
+                                    <a href="#" target="_blank" class="tx-link" id="funding-tx-link"></a>
+                                </div>
+                            </div>
+                            <div class="qr-display">
+                                <h4>QR Code - HTLC Data</h4>
+                                <canvas id="qrcode-canvas"></canvas>
+                                <p><small>Scan this to share HTLC details with receiver</small></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <div id="saved-addresses-section" class="funding-section">
-            <h2 class="section-title">💾 Saved Addresses</h2>
-            <div id="saved-addresses-list" class="saved-addresses-list">
-                Loading saved addresses...
-            </div>
-        </div>
-
-        <div id="funding-section" class="funding-section">
-            <h2 class="section-title">💰 Funding Required</h2>
-            
-            <div id="address-info" class="address-info">
-                <p><strong>Your Taproot Address for this calculation:</strong></p>
-                <div class="address-display" id="funding-address">
-                    Click "Generate Funding Address" to create an address...
+        <!-- Receiver Tab -->
+        <div id="receiver-tab" class="tab-content">
+            <div class="htlc-section">
+                <h2>
+                    <span class="status-indicator pending" id="receiver-status"></span>
+                    Claim HTLC Funds
+                </h2>
+                
+                <div class="htlc-grid">
+                    <div>
+                        <h3>Load HTLC Data</h3>
+                        <button class="btn btn-secondary" id="scan-qr-btn" style="margin-bottom: 10px;">📱 Scan QR Code</button>
+                        <button class="btn btn-secondary" id="paste-data-btn">📋 Paste HTLC Data</button>
+                        
+                        <div id="htlc-data-display" class="result-section hidden">
+                            <h4>HTLC Contract Details</h4>
+                            <div id="htlc-info"></div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <form id="receiver-form" class="hidden">
+                            <div class="form-group">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                    <label>Receiver Wallet (for claiming):</label>
+                                    <button type="button" class="btn btn-secondary" id="toggle-receiver-claim-input" style="font-size: 12px; padding: 5px 10px; width: auto;">Manual Input</button>
+                                </div>
+                                
+                                <div id="receiver-claim-dropdown">
+                                    <select id="receiver-claim-wallet-select" name="receiver-claim-wallet" required>
+                                        <option value="">Select wallet to receive funds...</option>
+                                    </select>
+                                    <small style="color: #6c757d;">Must match the receiver from HTLC creation</small>
+                                </div>
+                                
+                                <div id="receiver-claim-manual-input" class="hidden">
+                                    <input type="text" id="receiver-wif-manual" placeholder="Paste receiver private key (WIF)..." style="margin-bottom: 10px;">
+                                    <small style="color: #6c757d;">Enter WIF format private key for claiming</small>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Claim Destination Address:</label>
+                                <input type="text" id="claim-address" placeholder="tb1q..." readonly>
+                                <small style="color: #6c757d;">Funds will be sent to this address</small>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-success">Claim HTLC Funds</button>
+                        </form>
+                    </div>
                 </div>
                 
-                <div id="funding-status" class="funding-status info">
-                    Waiting for address generation...
+                <div id="receiver-results" class="result-section hidden">
+                    <h3>✅ Funds Claimed Successfully</h3>
+                    <div class="result-item">
+                        <div class="result-label">Claim Transaction</div>
+                        <div class="result-value">
+                            <a href="#" target="_blank" class="tx-link" id="claim-tx-link"></a>
+                        </div>
+                    </div>
                 </div>
-
-                <div class="button-group">
-                    <button class="btn btn-primary" id="checkFundingBtn">Check Funding Status</button>
-                </div>
-            </div>
-            
-            <h3>🪙 Get Testnet Bitcoin</h3>
-            <p>Send at least 100,000 satoshis (0.001 tBTC) to the address above from these faucets:</p>
-            
-            <div class="faucet-links">
-                <a href="https://testnet-faucet.mempool.co/" target="_blank" class="faucet-link">Mempool.co Faucet</a>
-                <a href="https://bitcoinfaucet.uo1.net/" target="_blank" class="faucet-link">BitcoinFaucet.uo1.net</a>
-                <a href="https://testnet.help/en/btcfaucet/testnet" target="_blank" class="faucet-link">Testnet.help</a>
-                <a href="https://coinfaucet.eu/en/btc-testnet/" target="_blank" class="faucet-link">CoinFaucet.eu</a>
-            </div>
-
-            <div id="funding-instructions" class="instructions">
-                Detailed funding instructions will appear here...
             </div>
         </div>
 
-        <!-- Offline Taproot Workflow UI -->
-<h2 class="section-title">⚡ Offline Taproot Workflow</h2>
-<ul class="operations" style="justify-content:flex-start;">
-  <li id="tab-sender" class="op-btn tab-link">Sender</li>
-  <li id="tab-receiver" class="op-btn tab-link">Receiver</li>
-  <li id="tab-refund" class="op-btn tab-link">Refund</li>
-</ul>
-<div id="loading" class="loading" style="display:none;">Loading...</div>
-<div id="error" class="error" style="display:none;"></div>
-<div id="section-sender" class="funding-section">
-  <form id="sender-form">
-    <div class="input-group"><label>Sender WIF:</label><input type="text" id="sender-wif-input" name="sender-wif" required style="flex:1;"><button type="button" class="btn btn-secondary" id="generate-sender-wif-btn" style="margin-left:10px;">Generate</button></div>
-    <div class="input-group"><label>Receiver PubKey (hex):</label><input type="text" name="receiver-address" required></div>
-    <div class="input-group"><label>Amount (sats):</label><input type="number" name="amount" value="50000" min="1000" required></div>
-    <div class="input-group"><label>Refund Timelock (block):</label><input type="number" name="refund-locktime" value="1700000" required></div>
-    <button class="btn btn-primary" type="submit">Create Funding PSBT</button>
-  </form>
-  <div id="sender-results" class="results-hidden" style="margin-top:20px;">
-    <h3>Transaction Data (includes secret)</h3><div id="qrcode-a"></div>
-    <div id="qrcode-b" style="display:none;"></div>
-  </div>
-</div>
-<div id="section-receiver" class="funding-section" style="display:none;">
-  <button class="btn btn-primary" id="start-receiver-scan-btn">Start Scan</button>
-  <button class="btn btn-secondary" id="paste-tx-btn" style="margin-left:10px;">Paste Tx Data</button><button type="button" class="btn btn-secondary" id="generate-receiver-wif-btn" style="margin-left:10px;">Generate Receiver Key</button><div id="receiver-generated-address" style="margin-top:10px; font-family:monospace;"></div>
-  <div id="receiver-scanner-div" style="margin-top:10px;"></div>
-  <form id="receiver-form" class="form-hidden">
-    <div class="input-group"><label>Receiver WIF:</label><input type="text" id="receiver-wif-input" name="receiver-wif" required style="flex:1;"></div>
-    <button class="btn btn-primary" type="submit">Create Claim PSBT</button>
-  </form>
-</div>
-<div id="section-refund" class="funding-section" style="display:none;">
-  <button class="btn btn-primary" id="start-refund-scan-btn">Start Scan</button>
-  <div id="refund-scanner-div" style="margin-top:10px;"></div>
-  <form id="refund-form" class="form-hidden">
-    <div class="input-group"><label>Sender WIF:</label><input type="text" id="sender-wif-input" name="sender-wif" required style="flex:1;"><button type="button" class="btn btn-secondary" id="generate-sender-wif-btn" style="margin-left:10px;">Generate</button></div>
-    <button class="btn btn-primary" type="submit">Create Refund PSBT</button>
-  </form>
-</div>
-<div id="results" class="results">
-            <h2 class="section-title">📊 Transaction Results</h2>
-            
-            <div class="result-item">
-                <div class="result-label">Operation</div>
-                <div class="result-value large-text" id="operation"></div>
+        <!-- Refund Tab -->
+        <div id="refund-tab" class="tab-content">
+            <div class="htlc-section">
+                <h2>
+                    <span class="status-indicator pending" id="refund-status"></span>
+                    Refund HTLC (After Timeout)
+                </h2>
+                
+                <div class="htlc-grid">
+                    <div>
+                        <h3>HTLC Timeout Status</h3>
+                        <div id="timeout-status" class="result-section">
+                            <div class="result-item">
+                                <div class="result-label">Current Block Height</div>
+                                <div class="result-value" id="current-height">Loading...</div>
+                            </div>
+                            <div class="result-item">
+                                <div class="result-label">Timeout Block Height</div>
+                                <div class="result-value" id="timeout-height">N/A</div>
+                            </div>
+                            <div class="result-item">
+                                <div class="result-label">Status</div>
+                                <div class="result-value" id="timeout-status-text">Load HTLC data first</div>
+                            </div>
+                        </div>
+                        
+                        <button class="btn btn-secondary" id="load-refund-data-btn">📋 Load HTLC Data</button>
+                    </div>
+                    
+                    <div>
+                        <form id="refund-form" class="hidden">
+                            <div class="form-group">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                    <label>Sender Wallet (for refund):</label>
+                                    <button type="button" class="btn btn-secondary" id="toggle-refund-input" style="font-size: 12px; padding: 5px 10px; width: auto;">Manual Input</button>
+                                </div>
+                                
+                                <div id="refund-wallet-dropdown">
+                                    <select id="refund-sender-wallet-select" name="refund-sender-wallet" required>
+                                        <option value="">Select sender wallet...</option>
+                                    </select>
+                                    <small style="color: #6c757d;">Must be the original sender wallet from HTLC creation</small>
+                                </div>
+                                
+                                <div id="refund-manual-input" class="hidden">
+                                    <input type="text" id="refund-wif-manual" placeholder="Paste sender private key (WIF)..." style="margin-bottom: 10px;">
+                                    <input type="text" id="refund-address-manual" placeholder="Paste refund destination address..." style="margin-bottom: 10px;">
+                                    <small style="color: #6c757d;">Enter original sender's WIF and destination address</small>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Refund Destination Address:</label>
+                                <input type="text" id="refund-address" placeholder="tb1q..." readonly>
+                                <small style="color: #6c757d;">Funds will be sent back to this address</small>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-danger">Create Refund Transaction</button>
+                        </form>
+                    </div>
+                </div>
+                
+                <div id="refund-results" class="result-section hidden">
+                    <h3>💰 Refund Transaction Created</h3>
+                    <div class="result-item">
+                        <div class="result-label">Refund Transaction</div>
+                        <div class="result-value">
+                            <a href="#" target="_blank" class="tx-link" id="refund-tx-link"></a>
+                        </div>
+                    </div>
+                </div>
             </div>
-            
-            <div class="result-item">
-                <div class="result-label">Result</div>
+        </div>
 
-  <script>
-    function openTab(evt, tabName) {
-      var i, tabcontent, tablinks;
-      tabcontent = document.getElementsByClassName("tab-content");
-      for (i = 0; i < tabcontent.length; i++) {
-        tabcontent[i].style.display = "none";
-      }
-      tablinks = document.getElementsByClassName("tab-link");
-      for (i = 0; i < tablinks.length; i++) {
-        tablinks[i].className = tablinks[i].className.replace(" active", "");
-      }
-      document.getElementById(tabName).style.display = "block";
-      evt.currentTarget.className += " active";
-    }
-    // Initialize the first tab
-    document.addEventListener('DOMContentLoaded', () => {
-        document.getElementsByClassName('tab-link')[0].click();
-    });
-  </script>
-  <script type="module" src="/src/client/app.ts"></script>
+        <!-- Loading overlay -->
+        <div id="loading" class="loading hidden">
+            <div>⏳ Processing transaction...</div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/qrcode@1.5.4/build/qrcode.min.js"></script>
+    <script>
+        let currentTab = 'sender';
+        let htlcData = null;
+        let availableWallets = [];
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Load saved wallets first
+            loadSavedWallets();
+            // Initialize network status
+            await updateNetworkStatus();
+            await updateCurrentBlock();
+            
+            // Tab functionality
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const tabName = e.target.closest('.tab-btn').getAttribute('data-tab');
+                    switchTab(tabName);
+                });
+            });
+
+            // Wallet selection handlers
+            document.getElementById('sender-wallet-select')?.addEventListener('change', handleSenderWalletChange);
+            document.getElementById('receiver-wallet-select')?.addEventListener('change', handleReceiverWalletChange);
+            document.getElementById('receiver-claim-wallet-select')?.addEventListener('change', handleReceiverClaimWalletChange);
+            document.getElementById('refund-sender-wallet-select')?.addEventListener('change', handleRefundSenderWalletChange);
+            
+            // Toggle handlers for manual input
+            document.getElementById('toggle-sender-input')?.addEventListener('click', () => toggleInputMode('sender'));
+            document.getElementById('toggle-receiver-input')?.addEventListener('click', () => toggleInputMode('receiver'));
+            document.getElementById('toggle-receiver-claim-input')?.addEventListener('click', () => toggleInputMode('receiver-claim'));
+            document.getElementById('toggle-refund-input')?.addEventListener('click', () => toggleInputMode('refund'));
+            
+            // Manual input handlers
+            document.getElementById('receiver-wif-manual')?.addEventListener('input', handleReceiverWifInput);
+            document.getElementById('refund-address-manual')?.addEventListener('input', handleRefundAddressInput);
+            
+            // Form handlers
+            const senderForm = document.getElementById('sender-form');
+            console.log('Sender form found:', !!senderForm);
+            senderForm?.addEventListener('submit', handleSenderForm);
+            
+            const receiverForm = document.getElementById('receiver-form');
+            console.log('Receiver form found:', !!receiverForm);
+            receiverForm?.addEventListener('submit', handleReceiverForm);
+            
+            const refundForm = document.getElementById('refund-form');
+            console.log('Refund form found:', !!refundForm);
+            refundForm?.addEventListener('submit', handleRefundForm);
+
+            // Action buttons
+            document.getElementById('scan-qr-btn')?.addEventListener('click', scanQRCode);
+            document.getElementById('paste-data-btn')?.addEventListener('click', pasteHTLCData);
+            document.getElementById('load-refund-data-btn')?.addEventListener('click', loadRefundData);
+            document.getElementById('refresh-wallets-btn')?.addEventListener('click', refreshWallets);
+            document.getElementById('test-form-btn')?.addEventListener('click', testForm);
+            document.getElementById('fill-test-data-btn')?.addEventListener('click', fillTestData);
+            document.getElementById('debug-wallets-btn')?.addEventListener('click', debugWalletData);
+            document.getElementById('refresh-balances-btn')?.addEventListener('click', async () => {
+                showLoading(true);
+                await refreshAllWalletBalances();
+                showLoading(false);
+                showToast('💰 All wallet balances updated!');
+            });
+
+            // Auto-update current block height
+            setInterval(updateCurrentBlock, 30000);
+        });
+
+        function switchTab(tabName) {
+            currentTab = tabName;
+            
+            // Update tab buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.querySelector(`[data-tab="${tabName}"]`)?.classList.add('active');
+            
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(`${tabName}-tab`)?.classList.add('active');
+        }
+
+        async function updateNetworkStatus() {
+            try {
+                const response = await fetch('/api/health');
+                const health = await response.json();
+                const statusEl = document.getElementById('network-status');
+                
+                if (health.status === 'healthy') {
+                    statusEl.className = 'network-status healthy';
+                    statusEl.textContent = `✅ Network Healthy - Block ${health.network.blockHeight}`;
+                } else {
+                    statusEl.className = 'network-status unhealthy';
+                    statusEl.textContent = '❌ Network Issues';
+                }
+            } catch (error) {
+                const statusEl = document.getElementById('network-status');
+                statusEl.className = 'network-status unhealthy';
+                statusEl.textContent = '❌ Connection Error';
+            }
+        }
+
+        async function updateCurrentBlock() {
+            try {
+                const response = await fetch('/api/block-height');
+                const data = await response.json();
+                document.getElementById('current-block').textContent = data.blockHeight;
+                document.getElementById('current-height').textContent = data.blockHeight;
+                
+                // Auto-suggest timeout block (100 blocks in future)
+                const timeoutSuggestion = data.blockHeight + 100;
+                const timeoutInput = document.getElementById('refund-locktime-input');
+                if (timeoutInput && !timeoutInput.value) {
+                    timeoutInput.value = timeoutSuggestion;
+                }
+            } catch (error) {
+                console.error('Failed to get current block:', error);
+            }
+        }
+
+        async function loadSavedWallets() {
+            const stored = localStorage.getItem('bitcoin-wallets');
+            availableWallets = stored ? JSON.parse(stored) : [];
+            
+            // Populate all wallet dropdowns
+            populateWalletDropdowns();
+            displayWalletList();
+            
+            // Automatically refresh balances when wallets are loaded
+            if (availableWallets.length > 0) {
+                await refreshAllWalletBalances();
+                showToast('🔄 Wallet balances refreshed from blockchain', 'success');
+            } else {
+                showToast('ℹ️ No wallets found. Create wallets in the Wallet page first.', 'info');
+            }
+        }
+
+        async function refreshWallets() {
+            loadSavedWallets();
+            await refreshAllWalletBalances();
+            showToast('🔄 Wallets and balances refreshed');
+        }
+        
+        async function refreshAllWalletBalances() {
+            if (availableWallets.length === 0) return;
+            
+            try {
+                const addresses = availableWallets.map(w => w.address);
+                const response = await fetch('/api/wallet/refresh-balances', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ addresses })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    
+                    // Update wallet balances in localStorage
+                    result.balances.forEach(balanceData => {
+                        const wallet = availableWallets.find(w => w.address === balanceData.address);
+                        if (wallet && !balanceData.error) {
+                            const oldBalance = wallet.balance;
+                            wallet.balance = balanceData.balance;
+                            console.log(`💰 Updated ${wallet.name}: ${oldBalance} → ${balanceData.balance} sats`);
+                        }
+                    });
+                    
+                    // Save updated wallets and refresh display
+                    localStorage.setItem('bitcoin-wallets', JSON.stringify(availableWallets));
+                    populateWalletDropdowns();
+                    displayWalletList();
+                    
+                    console.log('✅ Updated wallet balances:', result.balances);
+                } else {
+                    console.error('Failed to refresh balances');
+                }
+            } catch (error) {
+                console.error('Error refreshing balances:', error);
+            }
+        }
+        
+        function debugWalletData() {
+            console.log('=== WALLET DEBUG INFO ===');
+            const stored = localStorage.getItem('bitcoin-wallets');
+            console.log('Raw localStorage data:', stored);
+            if (stored) {
+                const wallets = JSON.parse(stored);
+                console.log('Parsed wallets:', wallets);
+                wallets.forEach((wallet, index) => {
+                    console.log(`Wallet ${index}:`, {
+                        name: wallet.name,
+                        address: wallet.address,
+                        publicKey: wallet.publicKey,
+                        publicKeyLength: wallet.publicKey?.length,
+                        addressType: wallet.addressType
+                    });
+                });
+            } else {
+                console.log('No wallets found in localStorage');
+            }
+            console.log('=== END WALLET DEBUG ===');
+        }
+        
+        async function registerWalletForHTLC(address, privateKey, name) {
+            try {
+                const response = await fetch('/api/wallet/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ address, privateKey, name })
+                });
+                
+                const result = await response.json();
+                if (response.ok) {
+                    console.log('✅ Wallet registered:', result);
+                    showToast(`✅ Registered: ${name || address.slice(-8)}`);
+                    return result;
+                } else {
+                    showError(result.error || 'Failed to register wallet');
+                    return null;
+                }
+            } catch (error) {
+                showError('Failed to register wallet: ' + error.message);
+                return null;
+            }
+        }
+
+        function displayWalletList() {
+            const walletListDiv = document.getElementById('wallet-list');
+            const noWalletsMsg = document.getElementById('no-wallets-message');
+            
+            if (availableWallets.length === 0) {
+                noWalletsMsg.style.display = 'block';
+                return;
+            }
+            
+            noWalletsMsg.style.display = 'none';
+            
+            // Clear existing wallet cards
+            walletListDiv.innerHTML = '';
+            
+            availableWallets.forEach(wallet => {
+                const walletCard = document.createElement('div');
+                walletCard.className = 'result-item';
+                walletCard.innerHTML = `
+                    <div class="result-label">${wallet.name} (${wallet.addressType.toUpperCase()})</div>
+                    <div class="result-value">
+                        <strong>Address:</strong> ${wallet.address}<br>
+                        <strong>Balance:</strong> ${wallet.balance} satoshis<br>
+                        <strong>Created:</strong> ${new Date(wallet.created).toLocaleDateString()}
+                    </div>
+                `;
+                walletListDiv.appendChild(walletCard);
+            });
+        }
+
+        function populateWalletDropdowns() {
+            const selectors = [
+                'sender-wallet-select',
+                'receiver-wallet-select', 
+                'receiver-claim-wallet-select',
+                'refund-sender-wallet-select'
+            ];
+            
+            selectors.forEach(selectorId => {
+                const select = document.getElementById(selectorId);
+                if (select) {
+                    // Clear existing options except first
+                    select.innerHTML = select.firstElementChild.outerHTML;
+                    
+                    // Add wallet options
+                    availableWallets.forEach(wallet => {
+                        const option = document.createElement('option');
+                        option.value = wallet.address;
+                        option.textContent = `${wallet.name} (${wallet.address.slice(0, 10)}...${wallet.address.slice(-6)}) - ${wallet.balance} sats`;
+                        option.dataset.wallet = JSON.stringify(wallet);
+                        select.appendChild(option);
+                    });
+                }
+            });
+        }
+
+        function handleSenderWalletChange(e) {
+            const walletData = e.target.options[e.target.selectedIndex]?.dataset.wallet;
+            if (walletData) {
+                const wallet = JSON.parse(walletData);
+                showToast(`📝 Sender: ${wallet.name} (${wallet.balance} sats)`);
+            }
+        }
+
+        function handleReceiverWalletChange(e) {
+            const walletData = e.target.options[e.target.selectedIndex]?.dataset.wallet;
+            if (walletData) {
+                const wallet = JSON.parse(walletData);
+                showToast(`📝 Receiver: ${wallet.name}`);
+            }
+        }
+
+        function handleReceiverClaimWalletChange(e) {
+            const walletData = e.target.options[e.target.selectedIndex]?.dataset.wallet;
+            if (walletData) {
+                const wallet = JSON.parse(walletData);
+                document.getElementById('claim-address').value = wallet.address;
+                showToast(`📝 Claim destination: ${wallet.name}`);
+            }
+        }
+
+        function handleRefundSenderWalletChange(e) {
+            const walletData = e.target.options[e.target.selectedIndex]?.dataset.wallet;
+            if (walletData) {
+                const wallet = JSON.parse(walletData);
+                document.getElementById('refund-address').value = wallet.address;
+                showToast(`📝 Refund destination: ${wallet.name}`);
+            }
+        }
+
+        function toggleInputMode(type) {
+            const toggleMaps = {
+                'sender': {
+                    dropdown: 'sender-wallet-dropdown',
+                    manual: 'sender-manual-input',
+                    button: 'toggle-sender-input'
+                },
+                'receiver': {
+                    dropdown: 'receiver-wallet-dropdown', 
+                    manual: 'receiver-manual-input',
+                    button: 'toggle-receiver-input'
+                },
+                'receiver-claim': {
+                    dropdown: 'receiver-claim-dropdown',
+                    manual: 'receiver-claim-manual-input', 
+                    button: 'toggle-receiver-claim-input'
+                },
+                'refund': {
+                    dropdown: 'refund-wallet-dropdown',
+                    manual: 'refund-manual-input',
+                    button: 'toggle-refund-input'
+                }
+            };
+            
+            const map = toggleMaps[type];
+            if (!map) return;
+            
+            const dropdownDiv = document.getElementById(map.dropdown);
+            const manualDiv = document.getElementById(map.manual);
+            const toggleBtn = document.getElementById(map.button);
+            
+            const isManualMode = !manualDiv.classList.contains('hidden');
+            
+            if (isManualMode) {
+                // Switch to dropdown mode
+                manualDiv.classList.add('hidden');
+                dropdownDiv.classList.remove('hidden');
+                toggleBtn.textContent = 'Manual Input';
+            } else {
+                // Switch to manual mode
+                dropdownDiv.classList.add('hidden');
+                manualDiv.classList.remove('hidden');
+                toggleBtn.textContent = 'Use Wallets';
+            }
+        }
+
+        function getSelectedWallet(selectId) {
+            const select = document.getElementById(selectId);
+            const selectedOption = select.options[select.selectedIndex];
+            return selectedOption?.dataset.wallet ? JSON.parse(selectedOption.dataset.wallet) : null;
+        }
+
+        function handleReceiverWifInput() {
+            const wif = document.getElementById('receiver-wif-manual').value;
+            if (wif) {
+                generateP2WPKHAddressFromWIF(wif).then(address => {
+                    if (address) {
+                        document.getElementById('claim-address').value = address;
+                    }
+                });
+            }
+        }
+
+        function handleRefundAddressInput() {
+            const address = document.getElementById('refund-address-manual').value;
+            if (address) {
+                document.getElementById('refund-address').value = address;
+            }
+        }
+
+        async function generateP2WPKHAddressFromWIF(wif) {
+            try {
+                const response = await fetch('/api/wallet/import', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: 'temp', privateKey: wif })
+                });
+                const wallet = await response.json();
+                return wallet.address;
+            } catch (error) {
+                console.error('Error generating address from WIF:', error);
+                return null;
+            }
+        }
+
+        async function handleSenderForm(e) {
+            console.log('handleSenderForm called');
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            
+            // Check if using manual input mode
+            const senderManualMode = !document.getElementById('sender-manual-input').classList.contains('hidden');
+            const receiverManualMode = !document.getElementById('receiver-manual-input').classList.contains('hidden');
+            
+            console.log('Manual modes:', { senderManualMode, receiverManualMode });
+            
+            let senderWif, receiverPubkey, senderWallet = null, receiverWallet = null;
+            
+            if (senderManualMode) {
+                senderWif = document.getElementById('sender-wif-manual').value;
+                if (!senderWif) {
+                    showError('Please enter sender private key');
+                    return;
+                }
+            } else {
+                senderWallet = getSelectedWallet('sender-wallet-select');
+                if (!senderWallet) {
+                    showError('Please select a sender wallet');
+                    return;
+                }
+                console.log('Full sender wallet object:', senderWallet);
+                senderWif = senderWallet.privateKey;
+                console.log('Extracted sender WIF:', senderWif?.slice(0, 10) + '...');
+            }
+            
+            let receiverAddress;
+            if (receiverManualMode) {
+                receiverAddress = document.getElementById('receiver-address-manual').value;
+                if (!receiverAddress) {
+                    showError('Please enter receiver address');
+                    return;
+                }
+                // For manual address input, we don't have the public key
+                receiverPubkey = null;
+            } else {
+                receiverWallet = getSelectedWallet('receiver-wallet-select');
+                if (!receiverWallet) {
+                    showError('Please select a receiver wallet');
+                    return;
+                }
+                console.log('Full receiver wallet object:', receiverWallet);
+                console.log('Available wallet fields:', Object.keys(receiverWallet));
+                console.log('Wallet publicKey field:', receiverWallet.publicKey);
+                console.log('Wallet address field:', receiverWallet.address);
+                receiverAddress = receiverWallet.address;
+                receiverPubkey = receiverWallet.publicKey;
+                console.log('Using receiver address:', receiverAddress);
+                console.log('Using receiver public key:', receiverPubkey);
+                console.log('Public key type:', typeof receiverPubkey, 'length:', receiverPubkey?.length);
+            }
+            
+            // Validate data before sending request
+            if (!receiverManualMode) {
+                // Wallet selection mode - must have public key
+                if (!receiverPubkey || typeof receiverPubkey !== 'string') {
+                    showError(`No receiver public key found in wallet data. Please check wallet or use manual input.`);
+                    return;
+                }
+                
+                if (receiverPubkey.length !== 66) {
+                    showError(`Invalid receiver public key format. Expected 66-character hex, got: ${receiverPubkey?.length || 0} characters. Value: "${receiverPubkey}"`);
+                    return;
+                }
+            } else {
+                // Manual mode - validate address format
+                if (!receiverAddress.startsWith('tb1')) {
+                    showError('Please enter a valid testnet address starting with "tb1"');
+                    return;
+                }
+            }
+            
+            try {
+                showLoading(true);
+                document.getElementById('sender-status').className = 'status-indicator active';
+                
+                const requestData = {
+                    senderWif: senderManualMode ? senderWif : null,
+                    senderAddress: senderManualMode ? null : senderWallet.address,
+                    receiverAddress: receiverAddress,
+                    receiverPublicKey: receiverPubkey,
+                    amount: parseInt(formData.get('amount')),
+                    refundLocktime: parseInt(formData.get('refund-locktime'))
+                };
+                
+                console.log('Sending request with:', {
+                    ...requestData,
+                    senderWif: senderWif?.slice(0, 10) + '...'
+                });
+                
+                const response = await fetch('/api/create-sender-transaction', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestData)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    htlcData = {
+                        ...result,
+                        senderWallet: senderWallet,
+                        receiverWallet: receiverWallet,
+                        manualMode: { sender: senderManualMode, receiver: receiverManualMode }
+                    };
+                    displaySenderResults(result);
+                    document.getElementById('sender-status').className = 'status-indicator completed';
+                    showToast('✅ HTLC created and funded');
+                    
+                    // Refresh wallet balances after transaction
+                    setTimeout(() => {
+                        refreshAllWalletBalances();
+                        showToast('🔄 Balances updated automatically');
+                    }, 5000); // Wait 5 seconds for transaction to confirm
+                } else {
+                    document.getElementById('sender-status').className = 'status-indicator pending';
+                    showError(result.error || 'Failed to create HTLC');
+                }
+            } catch (error) {
+                document.getElementById('sender-status').className = 'status-indicator pending';
+                showError('Network error: ' + error.message);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function handleReceiverForm(e) {
+            e.preventDefault();
+            
+            if (!htlcData) {
+                showError('No HTLC data loaded. Scan QR code or paste data first.');
+                return;
+            }
+            
+            // Check if using manual input mode
+            const manualMode = !document.getElementById('receiver-claim-manual-input').classList.contains('hidden');
+            let receiverWif;
+            
+            if (manualMode) {
+                receiverWif = document.getElementById('receiver-wif-manual').value;
+                if (!receiverWif) {
+                    showError('Please enter receiver private key');
+                    return;
+                }
+            } else {
+                const receiverWallet = getSelectedWallet('receiver-claim-wallet-select');
+                if (!receiverWallet) {
+                    showError('Please select a receiver wallet');
+                    return;
+                }
+                receiverWif = receiverWallet.privateKey;
+            }
+            
+            try {
+                showLoading(true);
+                document.getElementById('receiver-status').className = 'status-indicator active';
+                
+                const response = await fetch('/api/create-receiver-claim-transaction', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        txoData: htlcData,
+                        preimage: htlcData.preimage,
+                        receiverWif: receiverWif
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    displayReceiverResults(result);
+                    document.getElementById('receiver-status').className = 'status-indicator completed';
+                    showToast('✅ HTLC funds claimed successfully');
+                } else {
+                    document.getElementById('receiver-status').className = 'status-indicator pending';
+                    showError(result.error || 'Failed to claim HTLC');
+                }
+            } catch (error) {
+                document.getElementById('receiver-status').className = 'status-indicator pending';
+                showError('Network error: ' + error.message);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function handleRefundForm(e) {
+            e.preventDefault();
+            
+            if (!htlcData) {
+                showError('No HTLC data loaded. Load HTLC data first.');
+                return;
+            }
+            
+            // Check if using manual input mode
+            const manualMode = !document.getElementById('refund-manual-input').classList.contains('hidden');
+            let senderWif;
+            
+            if (manualMode) {
+                senderWif = document.getElementById('refund-wif-manual').value;
+                if (!senderWif) {
+                    showError('Please enter sender private key');
+                    return;
+                }
+            } else {
+                const senderWallet = getSelectedWallet('refund-sender-wallet-select');
+                if (!senderWallet) {
+                    showError('Please select the sender wallet for refund');
+                    return;
+                }
+                senderWif = senderWallet.privateKey;
+            }
+            
+            try {
+                showLoading(true);
+                document.getElementById('refund-status').className = 'status-indicator active';
+                
+                const response = await fetch('/api/create-sender-refund-transaction', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        txoData: htlcData,
+                        senderWif: senderWif
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    displayRefundResults(result);
+                    document.getElementById('refund-status').className = 'status-indicator completed';
+                    showToast('✅ HTLC refund processed');
+                } else {
+                    document.getElementById('refund-status').className = 'status-indicator pending';
+                    showError(result.error || 'Failed to process refund');
+                }
+            } catch (error) {
+                document.getElementById('refund-status').className = 'status-indicator pending';
+                showError('Network error: ' + error.message);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function displaySenderResults(result) {
+            const resultsDiv = document.getElementById('sender-results');
+            resultsDiv.classList.remove('hidden');
+            
+            document.getElementById('htlc-address').textContent = result.taprootAddress;
+            document.getElementById('preimage-display').textContent = result.preimage;
+            document.getElementById('funding-tx-link').href = result.explorerUrl || '#';
+            document.getElementById('funding-tx-link').textContent = result.txid;
+            
+            // Add wallet information to results
+            if (htlcData.senderWallet && htlcData.receiverWallet) {
+                const additionalInfo = document.createElement('div');
+                additionalInfo.innerHTML = `
+                    <div class="result-item">
+                        <div class="result-label">Sender Wallet</div>
+                        <div class="result-value">${htlcData.senderWallet.name} (${htlcData.senderWallet.address})</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">Receiver Wallet</div>
+                        <div class="result-value">${htlcData.receiverWallet.name} (${htlcData.receiverWallet.address})</div>
+                    </div>
+                `;
+                resultsDiv.appendChild(additionalInfo);
+            }
+            
+            // Generate QR code
+            const qrData = JSON.stringify({
+                txid: result.txid,
+                vout: result.vout,
+                value: result.value,
+                preimage: result.preimage,
+                senderPublicKey: result.senderPublicKey,
+                refundTimeLock: result.refundTimeLock,
+                receiverPublicKey: result.receiverPublicKey,
+                htlcAddress: result.taprootAddress,
+                senderWallet: htlcData.senderWallet,
+                receiverWallet: htlcData.receiverWallet
+            });
+            
+            QRCode.toCanvas(document.getElementById('qrcode-canvas'), qrData, { width: 200 });
+        }
+
+        function displayReceiverResults(result) {
+            const resultsDiv = document.getElementById('receiver-results');
+            resultsDiv.classList.remove('hidden');
+            
+            document.getElementById('claim-tx-link').href = result.explorerUrl || '#';
+            document.getElementById('claim-tx-link').textContent = result.txid;
+        }
+
+        function displayRefundResults(result) {
+            const resultsDiv = document.getElementById('refund-results');
+            resultsDiv.classList.remove('hidden');
+            
+            document.getElementById('refund-tx-link').href = result.explorerUrl || '#';
+            document.getElementById('refund-tx-link').textContent = result.txid;
+        }
+
+        function scanQRCode() {
+            showToast('📱 QR scanner would open here', 'info');
+            // In a real implementation, this would open camera/QR scanner
+        }
+
+        function pasteHTLCData() {
+            const pastedData = prompt('Paste HTLC transaction data (JSON):');
+            if (pastedData) {
+                try {
+                    htlcData = JSON.parse(pastedData);
+                    displayHTLCData();
+                    
+                    // Auto-select receiver wallet if it exists in saved wallets
+                    if (htlcData.receiverWallet) {
+                        const receiverSelect = document.getElementById('receiver-claim-wallet-select');
+                        const matchingOption = Array.from(receiverSelect.options).find(option => 
+                            option.value === htlcData.receiverWallet.address
+                        );
+                        if (matchingOption) {
+                            receiverSelect.value = matchingOption.value;
+                            document.getElementById('claim-address').value = htlcData.receiverWallet.address;
+                        }
+                    }
+                    
+                    document.getElementById('receiver-form').classList.remove('hidden');
+                    showToast('✅ HTLC data loaded');
+                } catch (error) {
+                    showError('Invalid HTLC data format. Expected JSON.');
+                }
+            }
+        }
+
+        function loadRefundData() {
+            const pastedData = prompt('Paste HTLC transaction data (JSON):');
+            if (pastedData) {
+                try {
+                    htlcData = JSON.parse(pastedData);
+                    updateTimeoutStatus();
+                    
+                    // Auto-select sender wallet if it exists in saved wallets
+                    if (htlcData.senderWallet) {
+                        const senderSelect = document.getElementById('refund-sender-wallet-select');
+                        const matchingOption = Array.from(senderSelect.options).find(option => 
+                            option.value === htlcData.senderWallet.address
+                        );
+                        if (matchingOption) {
+                            senderSelect.value = matchingOption.value;
+                            document.getElementById('refund-address').value = htlcData.senderWallet.address;
+                        }
+                    }
+                    
+                    document.getElementById('refund-form').classList.remove('hidden');
+                    showToast('✅ HTLC data loaded for refund');
+                } catch (error) {
+                    showError('Invalid HTLC data format. Expected JSON.');
+                }
+            }
+        }
+
+        function displayHTLCData() {
+            if (!htlcData) return;
+            
+            const display = document.getElementById('htlc-data-display');
+            display.classList.remove('hidden');
+            
+            document.getElementById('htlc-info').innerHTML = `
+                <div class="result-item">
+                    <div class="result-label">HTLC Address</div>
+                    <div class="result-value">${htlcData.htlcAddress || htlcData.taprootAddress}</div>
+                </div>
+                <div class="result-item">
+                    <div class="result-label">Amount</div>
+                    <div class="result-value">${htlcData.value} satoshis</div>
+                </div>
+                <div class="result-item">
+                    <div class="result-label">Timeout Block</div>
+                    <div class="result-value">${htlcData.refundTimeLock}</div>
+                </div>
+            `;
+        }
+
+        function updateTimeoutStatus() {
+            if (!htlcData) return;
+            
+            document.getElementById('timeout-height').textContent = htlcData.refundTimeLock;
+            
+            const currentBlock = parseInt(document.getElementById('current-height').textContent);
+            const timeoutBlock = htlcData.refundTimeLock;
+            
+            const statusText = document.getElementById('timeout-status-text');
+            if (currentBlock >= timeoutBlock) {
+                statusText.textContent = '✅ Timeout reached - Refund available';
+                statusText.style.color = '#198754';
+            } else {
+                const blocksRemaining = timeoutBlock - currentBlock;
+                statusText.textContent = `⏰ ${blocksRemaining} blocks until timeout`;
+                statusText.style.color = '#856404';
+            }
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading').classList.toggle('hidden', !show);
+        }
+
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.textContent = message;
+            document.querySelector('.container').appendChild(errorDiv);
+            setTimeout(() => errorDiv.remove(), 5000);
+        }
+
+        function testForm() {
+            console.log('Test form button clicked');
+            showToast('🧪 Form test - button works!');
+        }
+
+        async function fillTestData() {
+            console.log('Filling test data');
+            
+            // Switch to manual input mode for both
+            if (document.getElementById('sender-manual-input').classList.contains('hidden')) {
+                toggleInputMode('sender');
+            }
+            if (document.getElementById('receiver-manual-input').classList.contains('hidden')) {
+                toggleInputMode('receiver');
+            }
+            
+            // Fill test data with actual addresses
+            document.getElementById('sender-wif-manual').value = 'cUD6caVddi4mue2gLXDasLUJ3zU1GEnKKAfYVbaH4ve9Nxa8NtNu';
+            document.getElementById('receiver-address-manual').value = 'tb1qxlp4yvql2j3ujphp7zyytj7z6v99j72q8gxns3';
+            
+            // Fill amounts
+            document.querySelector('input[name="amount"]').value = '1000';
+            document.querySelector('input[name="refund-locktime"]').value = '4657650';
+            
+            showToast('📝 Test data filled - using manual address mode');
+            try {
+                const senderResponse = await fetch('/api/generate-keypair');
+                const senderKey = await senderResponse.json();
+                
+                const receiverResponse = await fetch('/api/generate-keypair');
+                const receiverKey = await receiverResponse.json();
+                
+                document.getElementById('sender-wif-manual').value = senderKey.wif;
+                document.getElementById('receiver-pubkey-manual').value = receiverKey.pubkeyHex;
+                
+                showToast('📝 Test data filled - ready to test HTLC');
+            } catch (error) {
+                showError('Failed to generate test data');
+            }
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            if (toast) {
+                toast.textContent = message;
+                toast.className = `show ${type}`;
+                setTimeout(() => toast.classList.remove('show'), 3000);
+            } else {
+                console.log('Toast:', message);
+            }
+        }
+    </script>
+    
     <div id="toast"></div>
 </body>
 </html>

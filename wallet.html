@@ -300,8 +300,83 @@
         }
 
         @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            
+            .container {
+                padding: 15px;
+                border-radius: 10px;
+            }
+            
+            .header h1 {
+                font-size: 1.8rem;
+            }
+            
             .wallet-grid {
                 grid-template-columns: 1fr;
+                gap: 15px;
+            }
+            
+            .wallet-section {
+                padding: 15px;
+            }
+            
+            .wallet-tabs {
+                flex-wrap: wrap;
+                justify-content: space-around;
+            }
+            
+            .tab-btn {
+                padding: 8px 12px;
+                font-size: 14px;
+                margin: 2px;
+                min-width: 80px;
+            }
+            
+            .nav-links a {
+                display: block;
+                margin: 5px 0;
+                padding: 12px 20px;
+                font-size: 14px;
+            }
+            
+            .form-group input, .form-group select, .form-group textarea {
+                padding: 15px;
+                font-size: 16px;
+            }
+            
+            .btn {
+                padding: 15px 20px;
+                font-size: 16px;
+                margin-bottom: 10px;
+            }
+            
+            .address-display {
+                padding: 10px;
+                font-size: 12px;
+            }
+            
+            .copy-btn {
+                padding: 8px 12px;
+                font-size: 12px;
+                margin-top: 8px;
+                display: block;
+                width: 100%;
+            }
+            
+            .transaction-list {
+                max-height: 300px;
+            }
+            
+            .transaction-item {
+                flex-direction: column;
+                align-items: flex-start;
+                padding: 10px;
+            }
+            
+            .qr-display {
+                padding: 15px;
             }
         }
     </style>
@@ -331,11 +406,21 @@
         <div id="overview-tab" class="tab-content active">
             <div class="wallet-grid">
                 <div class="wallet-section">
-                    <h2>Current Wallet</h2>
-                    <div id="current-wallet-info">
-                        <p>No wallet loaded. Create or import a wallet to get started.</p>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                        <h2>Current Wallet</h2>
+                        <button class="btn btn-secondary btn-sm d-flex align-items-center justify-content-center" id="refresh-balance-btn" style="width: 28px; height: 28px; padding: 0; font-size: 16px;">🔄</button>
                     </div>
-                    <button class="btn btn-secondary" id="refresh-balance-btn">Refresh Balance</button>
+                    
+                    <div class="form-group" style="margin-bottom: 20px;">
+                        <label for="wallet-selector" style="display: block; margin-bottom: 8px; font-weight: 600;">Select Wallet:</label>
+                        <select id="wallet-selector" style="width: 100%; padding: 10px; border: 2px solid #dee2e6; border-radius: 8px; font-size: 16px;">
+                            <option value="">Choose a wallet...</option>
+                        </select>
+                    </div>
+                    
+                    <div id="current-wallet-info">
+                        <p>No wallet selected. Choose a wallet from the dropdown above.</p>
+                    </div>
                 </div>
                 <div class="wallet-section">
                     <h2>Quick Actions</h2>
