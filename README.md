@@ -261,6 +261,11 @@ DEBUG=* npm start
 - [ ] Batch calculations
 - [ ] Mainnet support (with proper warnings)
 
+## 👥 Contributors
+
+- Original Author: c0llinx
+- Feature Additions: George
+
 ## 📄 License
 
 MIT License - This is educational software for learning Bitcoin development.
