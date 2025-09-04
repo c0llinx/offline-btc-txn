@@ -642,6 +642,7 @@
                             <div style="text-align: center; margin-top: 15px;">
                                 <button id="start-scan-btn" class="btn btn-success" style="margin: 5px;">▶️ Start Scanning</button>
                                 <button id="stop-scan-btn" class="btn btn-danger" style="margin: 5px; display: none;">⏹️ Stop Scanning</button>
+                                <button id="test-qr-btn" class="btn btn-secondary" style="margin: 5px; font-size: 12px;">🔧 Test QR Scanner</button>
                             </div>
                             <div id="scan-result" style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 5px; font-family: monospace; font-size: 12px; display: none;"></div>
                         </div>
@@ -846,6 +847,7 @@
             // Camera scanner controls
             document.getElementById('start-scan-btn')?.addEventListener('click', startScanning);
             document.getElementById('stop-scan-btn')?.addEventListener('click', stopScanning);
+            document.getElementById('test-qr-btn')?.addEventListener('click', testQRScanner);
             document.getElementById('load-refund-data-btn')?.addEventListener('click', loadRefundData);
             document.getElementById('refresh-wallets-btn')?.addEventListener('click', refreshWallets);
             
@@ -1704,20 +1706,67 @@
             const ctx = canvas.getContext('2d');
             
             if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
+                // Make sure canvas has proper dimensions
+                if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    console.log('Canvas dimensions set to:', canvas.width, 'x', canvas.height);
+                }
+                
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 
                 const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                 
+                // Debug logging every 60 frames (about 1 second)
+                if (Math.random() < 0.016) {
+                    console.log('Scanning frame:', canvas.width, 'x', canvas.height, 'jsQR available:', !!window.jsQR);
+                }
+                
                 if (window.jsQR) {
-                    const code = window.jsQR(imageData.data, imageData.width, imageData.height);
-                    
-                    if (code) {
-                        console.log('QR Code detected:', code.data);
-                        handleScannedQRCode(code.data);
-                        return; // Stop scanning
+                    try {
+                        // Try multiple inversion attempts for better detection
+                        const code = window.jsQR(imageData.data, imageData.width, imageData.height, {
+                            inversionAttempts: 'attemptBoth'
+                        });
+                        
+                        if (code) {
+                            console.log('🎯 QR Code detected:', code.data);
+                            console.log('QR Code location:', code.location);
+                            
+                            // Visual feedback - draw a box around the detected QR code
+                            ctx.strokeStyle = '#00ff00';
+                            ctx.lineWidth = 4;
+                            ctx.strokeRect(
+                                code.location.topLeftCorner.x,
+                                code.location.topLeftCorner.y,
+                                code.location.topRightCorner.x - code.location.topLeftCorner.x,
+                                code.location.bottomLeftCorner.y - code.location.topLeftCorner.y
+                            );
+                            
+                            // Make canvas visible briefly to show detection
+                            canvas.style.position = 'absolute';
+                            canvas.style.top = video.offsetTop + 'px';
+                            canvas.style.left = video.offsetLeft + 'px';
+                            canvas.style.zIndex = '10';
+                            canvas.classList.remove('hidden');
+                            
+                            setTimeout(() => {
+                                canvas.classList.add('hidden');
+                            }, 1000);
+                            
+                            handleScannedQRCode(code.data);
+                            return; // Stop scanning
+                        }
+                    } catch (error) {
+                        console.error('jsQR scan error:', error);
                     }
+                } else {
+                    console.error('jsQR library not available');
+                }
+            } else {
+                // Debug video state
+                if (Math.random() < 0.01) {
+                    console.log('Video not ready, readyState:', video.readyState);
                 }
             }
             
@@ -1771,6 +1820,39 @@
                     ${htlcData.preimage ? `<p><strong>Preimage:</strong> ${htlcData.preimage.slice(0, 20)}...</p>` : ''}
                 </div>
             `;
+        }
+
+        function testQRScanner() {
+            console.log('🔧 Testing QR Scanner components...');
+            console.log('jsQR available:', !!window.jsQR);
+            console.log('getUserMedia available:', !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia));
+            
+            const video = document.getElementById('qr-video');
+            const canvas = document.getElementById('qr-canvas');
+            
+            console.log('Video element:', !!video);
+            console.log('Canvas element:', !!canvas);
+            
+            if (video) {
+                console.log('Video dimensions:', video.videoWidth, 'x', video.videoHeight);
+                console.log('Video readyState:', video.readyState);
+            }
+            
+            if (canvas) {
+                console.log('Canvas dimensions:', canvas.width, 'x', canvas.height);
+            }
+            
+            // Test with fake QR data
+            const testData = JSON.stringify({
+                txid: "test123",
+                vout: 0,
+                value: 10000,
+                preimage: "test_preimage",
+                refundTimeLock: 123456
+            });
+            
+            console.log('Testing with fake QR data:', testData);
+            handleScannedQRCode(testData);
         }
 
         function pasteHTLCData() {
