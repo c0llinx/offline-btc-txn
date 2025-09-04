@@ -305,19 +305,105 @@ app.use((error: Error, req: express.Request, res: express.Response, next: expres
 /**
  * Sender: create initial funding PSBT (QR Code A + B)
  */
+// Simple in-memory wallet store for demo - in production, use encrypted database
+const walletStore = new Map<string, { privateKey: string; publicKey: string; name?: string }>();
+
 app.post('/api/create-sender-transaction', async (req, res) => {
   try {
-    const { senderWif, receiverAddress, amount, refundLocktime } = req.body;
-    if (!senderWif || !receiverAddress || typeof amount !== 'number' || typeof refundLocktime !== 'number') {
-      return res.status(400).json({ error: 'senderWif, receiverAddress, amount, refundLocktime required' });
+    const { senderWif, senderAddress, receiverAddress, amount, refundLocktime, receiverPublicKey } = req.body;
+    
+    // Allow either senderWif OR senderAddress (will lookup private key)
+    let actualSenderWif = senderWif;
+    let actualReceiverPubKey = receiverPublicKey;
+    
+    if (!senderWif && senderAddress) {
+      // Look up private key for sender address
+      const senderWallet = walletStore.get(senderAddress);
+      if (!senderWallet) {
+        return res.status(400).json({ 
+          error: `No private key found for sender address: ${senderAddress}`,
+          hint: 'Use /api/wallet/register to register this address with its private key'
+        });
+      }
+      actualSenderWif = senderWallet.privateKey;
+      console.log(`✅ Found private key for sender address: ${senderAddress}`);
     }
     
-    const result = await workflowService.createFundingPSBT(senderWif, receiverAddress, amount, refundLocktime);
+    // Look up public key for receiver address if not provided
+    if (!receiverPublicKey && receiverAddress.startsWith('tb1')) {
+      const receiverWallet = walletStore.get(receiverAddress);
+      if (receiverWallet) {
+        actualReceiverPubKey = receiverWallet.publicKey;
+        console.log(`✅ Found public key for receiver address: ${receiverAddress}`);
+      }
+    }
+    
+    if (!actualSenderWif || !receiverAddress || typeof amount !== 'number' || typeof refundLocktime !== 'number') {
+      return res.status(400).json({ error: 'senderWif/senderAddress, receiverAddress, amount, refundLocktime required' });
+    }
+    
+    // Use the looked-up or provided public key
+    let receiverPubKeyHex = actualReceiverPubKey;
+    
+    // If receiverAddress is a bech32 address and no public key found, create a simpler HTLC
+    if (receiverAddress.startsWith('tb1') && !actualReceiverPubKey) {
+      // Manual address mode - create HTLC that pays directly to the address
+      const result = await workflowService.createSimpleHTLC(actualSenderWif, receiverAddress, amount, refundLocktime);
+      
+      // Broadcast the funding transaction
+      if (result.psbt && result.psbt !== 'TODO') {
+        const broadcastTxid = await mempoolAPI.broadcastTransaction(result.psbt);
+        const explorerUrl = mempoolAPI.getMempoolURL(broadcastTxid);
+        
+        // Schedule balance update for sender address
+        setTimeout(async () => {
+          try {
+            const senderAddr = result.senderAddress || senderAddress;
+            if (senderAddr) {
+              const newBalance = await mempoolAPI.checkAddressBalance(senderAddr, 0);
+              console.log(`🔄 Updated sender balance: ${senderAddr} = ${newBalance.availableBalance} sats`);
+            }
+          } catch (error) {
+            console.log('⚠️ Failed to update sender balance:', error);
+          }
+        }, 3000);
+        
+        res.json({ ...result, broadcastTxid, explorerUrl, htlcStarted: true });
+      } else {
+        res.json(result);
+      }
+      return;
+    }
+    
+    // Validate public key format
+    if (receiverPubKeyHex.length !== 66) {
+      return res.status(400).json({ 
+        error: `receiverPublicKey must be a 66-character hex public key, got ${receiverPubKeyHex.length} characters`,
+        hint: 'Provide the public key corresponding to the receiver address',
+        received: receiverPubKeyHex
+      });
+    }
+    
+    const result = await workflowService.createFundingPSBT(actualSenderWif, receiverPubKeyHex, amount, refundLocktime);
     
     // Broadcast the funding transaction to start HTLC timing
     if (result.psbt && result.psbt !== 'TODO') {
       const broadcastTxid = await mempoolAPI.broadcastTransaction(result.psbt);
       const explorerUrl = mempoolAPI.getMempoolURL(broadcastTxid);
+      
+      // Schedule balance update for sender address  
+      setTimeout(async () => {
+        try {
+          const senderAddr = senderAddress;
+          if (senderAddr) {
+            const newBalance = await mempoolAPI.checkAddressBalance(senderAddr, 0);
+            console.log(`🔄 Updated sender balance: ${senderAddr} = ${newBalance.availableBalance} sats`);
+          }
+        } catch (error) {
+          console.log('⚠️ Failed to update sender balance:', error);
+        }
+      }, 3000);
+      
       res.json({ ...result, broadcastTxid, explorerUrl, htlcStarted: true });
     } else {
       res.json(result);
@@ -417,10 +503,70 @@ app.post('/api/wallet/create', async (req, res) => {
       created: new Date().toISOString()
     };
 
+    // Automatically register in HTLC wallet store for seamless integration
+    walletStore.set(address, {
+      privateKey: wallet.privateKey,
+      publicKey: wallet.publicKey,
+      name: wallet.name
+    });
+    
+    console.log(`✅ Auto-registered wallet for HTLC use: ${address}`);
+
     res.json(wallet);
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to create wallet' });
   }
+});
+
+// Register existing address with private key for HTLC use
+app.post('/api/wallet/register', async (req, res) => {
+  try {
+    const { address, privateKey, name } = req.body;
+    if (!address || !privateKey) {
+      return res.status(400).json({ error: 'address and privateKey required' });
+    }
+
+    // Validate private key and derive address to verify match
+    const keyPair = ECPair.fromWIF(privateKey, bitcoin.networks.testnet);
+    const p2wpkh = bitcoin.payments.p2wpkh({ pubkey: keyPair.publicKey, network: bitcoin.networks.testnet });
+    const derivedAddress = p2wpkh.address!;
+    
+    if (derivedAddress !== address) {
+      return res.status(400).json({ 
+        error: 'Private key does not match the provided address',
+        provided: address,
+        derived: derivedAddress
+      });
+    }
+
+    // Store in wallet registry
+    walletStore.set(address, {
+      privateKey,
+      publicKey: keyPair.publicKey.toString('hex'),
+      name: name || `Wallet-${address.slice(-8)}`
+    });
+
+    console.log(`✅ Registered wallet: ${address}`);
+    
+    res.json({ 
+      success: true, 
+      address,
+      publicKey: keyPair.publicKey.toString('hex'),
+      message: 'Wallet registered successfully'
+    });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to register wallet' });
+  }
+});
+
+// Get all registered wallets
+app.get('/api/wallet/registered', (req, res) => {
+  const wallets = Array.from(walletStore.entries()).map(([address, data]) => ({
+    address,
+    publicKey: data.publicKey,
+    name: data.name
+  }));
+  res.json({ wallets });
 });
 
 // Import existing wallet
@@ -450,6 +596,15 @@ app.post('/api/wallet/import', async (req, res) => {
       created: new Date().toISOString()
     };
 
+    // Automatically register in HTLC wallet store for seamless integration
+    walletStore.set(address, {
+      privateKey: wallet.privateKey,
+      publicKey: wallet.publicKey,
+      name: wallet.name
+    });
+    
+    console.log(`✅ Auto-registered imported wallet for HTLC use: ${address}`);
+
     res.json(wallet);
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to import wallet' });
@@ -466,6 +621,40 @@ app.get('/api/wallet/balance/:address', async (req, res) => {
     console.log('Balance check failed, returning 0 for demo:', error);
     // Return 0 balance when API fails instead of error
     res.json({ balance: 0, apiError: true });
+  }
+});
+
+// Refresh all wallet balances
+app.post('/api/wallet/refresh-balances', async (req, res) => {
+  try {
+    const { addresses } = req.body;
+    if (!addresses || !Array.isArray(addresses)) {
+      return res.status(400).json({ error: 'addresses array required' });
+    }
+
+    const balanceResults = [];
+    for (const address of addresses) {
+      try {
+        const balanceInfo = await mempoolAPI.checkAddressBalance(address, 0);
+        balanceResults.push({
+          address,
+          balance: balanceInfo.availableBalance,
+          confirmed: balanceInfo.confirmedBalance,
+          unconfirmed: balanceInfo.unconfirmedBalance
+        });
+        console.log(`🔄 Refreshed balance: ${address} = ${balanceInfo.availableBalance} sats`);
+      } catch (error) {
+        balanceResults.push({
+          address,
+          balance: 0,
+          error: error instanceof Error ? error.message : 'Failed to fetch balance'
+        });
+      }
+    }
+
+    res.json({ balances: balanceResults });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to refresh balances' });
   }
 });
 

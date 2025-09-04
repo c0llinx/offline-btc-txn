@@ -426,7 +426,7 @@
                                 </div>
                                 
                                 <div id="sender-wallet-dropdown">
-                                    <select id="sender-wallet-select" name="sender-wallet" required>
+                                    <select id="sender-wallet-select" name="sender-wallet">
                                         <option value="">Select sender wallet...</option>
                                     </select>
                                     <small style="color: #6c757d; display: block; margin-top: 5px;">
@@ -447,15 +447,15 @@
                                 </div>
                                 
                                 <div id="receiver-wallet-dropdown">
-                                    <select id="receiver-wallet-select" name="receiver-wallet" required>
+                                    <select id="receiver-wallet-select" name="receiver-wallet">
                                         <option value="">Select receiver wallet...</option>
                                     </select>
                                     <small style="color: #6c757d;">Receiver's public key will be used for HTLC script</small>
                                 </div>
                                 
                                 <div id="receiver-manual-input" class="hidden">
-                                    <input type="text" id="receiver-pubkey-manual" placeholder="Paste receiver public key (hex)..." style="margin-bottom: 10px;">
-                                    <small style="color: #6c757d;">Enter 66-character hex public key (starts with '02' or '03')</small>
+                                    <input type="text" id="receiver-address-manual" placeholder="Paste receiver address (tb1...)..." style="margin-bottom: 10px;">
+                                    <small style="color: #6c757d;">Enter testnet address (starts with 'tb1')</small>
                                 </div>
                             </div>
                         </div>
@@ -474,6 +474,10 @@
                         </div>
                     </div>
                     
+                    <button type="button" class="btn btn-secondary" id="test-form-btn" style="margin-bottom: 10px;">🧪 Test Form</button>
+                    <button type="button" class="btn btn-secondary" id="fill-test-data-btn" style="margin-bottom: 10px;">📝 Fill Test Data</button>
+                    <button type="button" class="btn btn-secondary" id="debug-wallets-btn" style="margin-bottom: 10px;">🔍 Debug Wallets</button>
+                    <button type="button" class="btn btn-secondary" id="refresh-balances-btn" style="margin-bottom: 10px;">💰 Refresh Balances</button>
                     <button type="submit" class="btn btn-success">Create HTLC Funding Transaction</button>
                 </form>
                 
@@ -690,15 +694,32 @@
             document.getElementById('refund-address-manual')?.addEventListener('input', handleRefundAddressInput);
             
             // Form handlers
-            document.getElementById('sender-form')?.addEventListener('submit', handleSenderForm);
-            document.getElementById('receiver-form')?.addEventListener('submit', handleReceiverForm);
-            document.getElementById('refund-form')?.addEventListener('submit', handleRefundForm);
+            const senderForm = document.getElementById('sender-form');
+            console.log('Sender form found:', !!senderForm);
+            senderForm?.addEventListener('submit', handleSenderForm);
+            
+            const receiverForm = document.getElementById('receiver-form');
+            console.log('Receiver form found:', !!receiverForm);
+            receiverForm?.addEventListener('submit', handleReceiverForm);
+            
+            const refundForm = document.getElementById('refund-form');
+            console.log('Refund form found:', !!refundForm);
+            refundForm?.addEventListener('submit', handleRefundForm);
 
             // Action buttons
             document.getElementById('scan-qr-btn')?.addEventListener('click', scanQRCode);
             document.getElementById('paste-data-btn')?.addEventListener('click', pasteHTLCData);
             document.getElementById('load-refund-data-btn')?.addEventListener('click', loadRefundData);
             document.getElementById('refresh-wallets-btn')?.addEventListener('click', refreshWallets);
+            document.getElementById('test-form-btn')?.addEventListener('click', testForm);
+            document.getElementById('fill-test-data-btn')?.addEventListener('click', fillTestData);
+            document.getElementById('debug-wallets-btn')?.addEventListener('click', debugWalletData);
+            document.getElementById('refresh-balances-btn')?.addEventListener('click', async () => {
+                showLoading(true);
+                await refreshAllWalletBalances();
+                showLoading(false);
+                showToast('💰 All wallet balances updated!');
+            });
 
             // Auto-update current block height
             setInterval(updateCurrentBlock, 30000);
@@ -758,7 +779,7 @@
             }
         }
 
-        function loadSavedWallets() {
+        async function loadSavedWallets() {
             const stored = localStorage.getItem('bitcoin-wallets');
             availableWallets = stored ? JSON.parse(stored) : [];
             
@@ -766,14 +787,102 @@
             populateWalletDropdowns();
             displayWalletList();
             
-            if (availableWallets.length === 0) {
+            // Automatically refresh balances when wallets are loaded
+            if (availableWallets.length > 0) {
+                await refreshAllWalletBalances();
+                showToast('🔄 Wallet balances refreshed from blockchain', 'success');
+            } else {
                 showToast('ℹ️ No wallets found. Create wallets in the Wallet page first.', 'info');
             }
         }
 
-        function refreshWallets() {
+        async function refreshWallets() {
             loadSavedWallets();
-            showToast('🔄 Wallets refreshed');
+            await refreshAllWalletBalances();
+            showToast('🔄 Wallets and balances refreshed');
+        }
+        
+        async function refreshAllWalletBalances() {
+            if (availableWallets.length === 0) return;
+            
+            try {
+                const addresses = availableWallets.map(w => w.address);
+                const response = await fetch('/api/wallet/refresh-balances', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ addresses })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    
+                    // Update wallet balances in localStorage
+                    result.balances.forEach(balanceData => {
+                        const wallet = availableWallets.find(w => w.address === balanceData.address);
+                        if (wallet && !balanceData.error) {
+                            const oldBalance = wallet.balance;
+                            wallet.balance = balanceData.balance;
+                            console.log(`💰 Updated ${wallet.name}: ${oldBalance} → ${balanceData.balance} sats`);
+                        }
+                    });
+                    
+                    // Save updated wallets and refresh display
+                    localStorage.setItem('bitcoin-wallets', JSON.stringify(availableWallets));
+                    populateWalletDropdowns();
+                    displayWalletList();
+                    
+                    console.log('✅ Updated wallet balances:', result.balances);
+                } else {
+                    console.error('Failed to refresh balances');
+                }
+            } catch (error) {
+                console.error('Error refreshing balances:', error);
+            }
+        }
+        
+        function debugWalletData() {
+            console.log('=== WALLET DEBUG INFO ===');
+            const stored = localStorage.getItem('bitcoin-wallets');
+            console.log('Raw localStorage data:', stored);
+            if (stored) {
+                const wallets = JSON.parse(stored);
+                console.log('Parsed wallets:', wallets);
+                wallets.forEach((wallet, index) => {
+                    console.log(`Wallet ${index}:`, {
+                        name: wallet.name,
+                        address: wallet.address,
+                        publicKey: wallet.publicKey,
+                        publicKeyLength: wallet.publicKey?.length,
+                        addressType: wallet.addressType
+                    });
+                });
+            } else {
+                console.log('No wallets found in localStorage');
+            }
+            console.log('=== END WALLET DEBUG ===');
+        }
+        
+        async function registerWalletForHTLC(address, privateKey, name) {
+            try {
+                const response = await fetch('/api/wallet/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ address, privateKey, name })
+                });
+                
+                const result = await response.json();
+                if (response.ok) {
+                    console.log('✅ Wallet registered:', result);
+                    showToast(`✅ Registered: ${name || address.slice(-8)}`);
+                    return result;
+                } else {
+                    showError(result.error || 'Failed to register wallet');
+                    return null;
+                }
+            } catch (error) {
+                showError('Failed to register wallet: ' + error.message);
+                return null;
+            }
         }
 
         function displayWalletList() {
@@ -951,12 +1060,15 @@
         }
 
         async function handleSenderForm(e) {
+            console.log('handleSenderForm called');
             e.preventDefault();
             const formData = new FormData(e.target);
             
             // Check if using manual input mode
             const senderManualMode = !document.getElementById('sender-manual-input').classList.contains('hidden');
             const receiverManualMode = !document.getElementById('receiver-manual-input').classList.contains('hidden');
+            
+            console.log('Manual modes:', { senderManualMode, receiverManualMode });
             
             let senderWif, receiverPubkey, senderWallet = null, receiverWallet = null;
             
@@ -972,37 +1084,79 @@
                     showError('Please select a sender wallet');
                     return;
                 }
+                console.log('Full sender wallet object:', senderWallet);
                 senderWif = senderWallet.privateKey;
+                console.log('Extracted sender WIF:', senderWif?.slice(0, 10) + '...');
             }
             
+            let receiverAddress;
             if (receiverManualMode) {
-                receiverPubkey = document.getElementById('receiver-pubkey-manual').value;
-                if (!receiverPubkey) {
-                    showError('Please enter receiver public key');
+                receiverAddress = document.getElementById('receiver-address-manual').value;
+                if (!receiverAddress) {
+                    showError('Please enter receiver address');
                     return;
                 }
+                // For manual address input, we don't have the public key
+                receiverPubkey = null;
             } else {
                 receiverWallet = getSelectedWallet('receiver-wallet-select');
                 if (!receiverWallet) {
                     showError('Please select a receiver wallet');
                     return;
                 }
+                console.log('Full receiver wallet object:', receiverWallet);
+                console.log('Available wallet fields:', Object.keys(receiverWallet));
+                console.log('Wallet publicKey field:', receiverWallet.publicKey);
+                console.log('Wallet address field:', receiverWallet.address);
+                receiverAddress = receiverWallet.address;
                 receiverPubkey = receiverWallet.publicKey;
+                console.log('Using receiver address:', receiverAddress);
+                console.log('Using receiver public key:', receiverPubkey);
+                console.log('Public key type:', typeof receiverPubkey, 'length:', receiverPubkey?.length);
+            }
+            
+            // Validate data before sending request
+            if (!receiverManualMode) {
+                // Wallet selection mode - must have public key
+                if (!receiverPubkey || typeof receiverPubkey !== 'string') {
+                    showError(`No receiver public key found in wallet data. Please check wallet or use manual input.`);
+                    return;
+                }
+                
+                if (receiverPubkey.length !== 66) {
+                    showError(`Invalid receiver public key format. Expected 66-character hex, got: ${receiverPubkey?.length || 0} characters. Value: "${receiverPubkey}"`);
+                    return;
+                }
+            } else {
+                // Manual mode - validate address format
+                if (!receiverAddress.startsWith('tb1')) {
+                    showError('Please enter a valid testnet address starting with "tb1"');
+                    return;
+                }
             }
             
             try {
                 showLoading(true);
                 document.getElementById('sender-status').className = 'status-indicator active';
                 
+                const requestData = {
+                    senderWif: senderManualMode ? senderWif : null,
+                    senderAddress: senderManualMode ? null : senderWallet.address,
+                    receiverAddress: receiverAddress,
+                    receiverPublicKey: receiverPubkey,
+                    amount: parseInt(formData.get('amount')),
+                    refundLocktime: parseInt(formData.get('refund-locktime'))
+                };
+                
+                console.log('Sending request with:', {
+                    ...requestData,
+                    senderWif: senderWif?.slice(0, 10) + '...'
+                });
+                
                 const response = await fetch('/api/create-sender-transaction', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        senderWif: senderWif,
-                        receiverAddress: receiverPubkey,
-                        amount: parseInt(formData.get('amount')),
-                        refundLocktime: parseInt(formData.get('refund-locktime'))
-                    })
+                    body: JSON.stringify(requestData)
                 });
                 
                 const result = await response.json();
@@ -1017,6 +1171,12 @@
                     displaySenderResults(result);
                     document.getElementById('sender-status').className = 'status-indicator completed';
                     showToast('✅ HTLC created and funded');
+                    
+                    // Refresh wallet balances after transaction
+                    setTimeout(() => {
+                        refreshAllWalletBalances();
+                        showToast('🔄 Balances updated automatically');
+                    }, 5000); // Wait 5 seconds for transaction to confirm
                 } else {
                     document.getElementById('sender-status').className = 'status-indicator pending';
                     showError(result.error || 'Failed to create HTLC');
@@ -1316,11 +1476,56 @@
             setTimeout(() => errorDiv.remove(), 5000);
         }
 
+        function testForm() {
+            console.log('Test form button clicked');
+            showToast('🧪 Form test - button works!');
+        }
+
+        async function fillTestData() {
+            console.log('Filling test data');
+            
+            // Switch to manual input mode for both
+            if (document.getElementById('sender-manual-input').classList.contains('hidden')) {
+                toggleInputMode('sender');
+            }
+            if (document.getElementById('receiver-manual-input').classList.contains('hidden')) {
+                toggleInputMode('receiver');
+            }
+            
+            // Fill test data with actual addresses
+            document.getElementById('sender-wif-manual').value = 'cUD6caVddi4mue2gLXDasLUJ3zU1GEnKKAfYVbaH4ve9Nxa8NtNu';
+            document.getElementById('receiver-address-manual').value = 'tb1qxlp4yvql2j3ujphp7zyytj7z6v99j72q8gxns3';
+            
+            // Fill amounts
+            document.querySelector('input[name="amount"]').value = '1000';
+            document.querySelector('input[name="refund-locktime"]').value = '4657650';
+            
+            showToast('📝 Test data filled - using manual address mode');
+            try {
+                const senderResponse = await fetch('/api/generate-keypair');
+                const senderKey = await senderResponse.json();
+                
+                const receiverResponse = await fetch('/api/generate-keypair');
+                const receiverKey = await receiverResponse.json();
+                
+                document.getElementById('sender-wif-manual').value = senderKey.wif;
+                document.getElementById('receiver-pubkey-manual').value = receiverKey.pubkeyHex;
+                
+                showToast('📝 Test data filled - ready to test HTLC');
+            } catch (error) {
+                showError('Failed to generate test data');
+            }
+        }
+
         function showToast(message, type = 'success') {
             const toast = document.getElementById('toast');
-            toast.textContent = message;
-            toast.className = `show ${type}`;
-            setTimeout(() => toast.classList.remove('show'), 3000);
+            if (toast) {
+                toast.textContent = message;
+                toast.className = `show ${type}`;
+                setTimeout(() => toast.classList.remove('show'), 3000);
+            } else {
+                console.log('Toast:', message);
+            }
         }
     </script>
     
