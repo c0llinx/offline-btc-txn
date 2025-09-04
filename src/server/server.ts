@@ -3,7 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import cors from 'cors';
 import { TaprootCalculatorService } from './calculator.js';
-import { OfflineWorkflowService } from './workflow.ts';
+import { OfflineWorkflowService } from './workflow.js';
 import { RealBitcoinCalculator } from './bitcoin.js';
 import { MempoolAPI } from './mempool.js';
 import { CalculationRequest } from '../shared/types.js';
