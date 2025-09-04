@@ -493,6 +493,11 @@
             <p class="subtitle">Air-gapped Taproot workflow: create, claim, and refund securely via QR codes</p>
         </div>
 
+        <div style="text-align: center; margin-bottom: 30px;">
+            <a href="wallet.html" style="display: inline-block; padding: 10px 20px; margin: 0 10px; background: #6c757d; color: white; text-decoration: none; border-radius: 5px; transition: background-color 0.3s;">Bitcoin Wallet</a>
+            <a href="index.html" style="display: inline-block; padding: 10px 20px; margin: 0 10px; background: #0d6efd; color: white; text-decoration: none; border-radius: 5px;">HTLC Contracts</a>
+        </div>
+
         <div id="network-status" class="network-status">Checking network status...</div>
 
         <div class="warning-box">
@@ -588,14 +593,13 @@
     <button class="btn btn-primary" type="submit">Create Funding PSBT</button>
   </form>
   <div id="sender-results" class="results-hidden" style="margin-top:20px;">
-    <h3>QR Code A (Tx Data)</h3><div id="qrcode-a"></div>
-    <h3>QR Code B (Secret)</h3><div id="qrcode-b"></div>
+    <h3>Transaction Data (includes secret)</h3><div id="qrcode-a"></div>
+    <div id="qrcode-b" style="display:none;"></div>
   </div>
 </div>
 <div id="section-receiver" class="funding-section" style="display:none;">
   <button class="btn btn-primary" id="start-receiver-scan-btn">Start Scan</button>
-  <button class="btn btn-secondary" id="paste-tx-btn" style="margin-left:10px;">Paste Tx Data</button>
-  <button class="btn btn-secondary" id="paste-secret-btn" style="margin-left:10px;">Paste Secret</button><button type="button" class="btn btn-secondary" id="generate-receiver-wif-btn" style="margin-left:10px;">Generate Receiver Key</button><div id="receiver-generated-address" style="margin-top:10px; font-family:monospace;"></div>
+  <button class="btn btn-secondary" id="paste-tx-btn" style="margin-left:10px;">Paste Tx Data</button><button type="button" class="btn btn-secondary" id="generate-receiver-wif-btn" style="margin-left:10px;">Generate Receiver Key</button><div id="receiver-generated-address" style="margin-top:10px; font-family:monospace;"></div>
   <div id="receiver-scanner-div" style="margin-top:10px;"></div>
   <form id="receiver-form" class="form-hidden">
     <div class="input-group"><label>Receiver WIF:</label><input type="text" id="receiver-wif-input" name="receiver-wif" required style="flex:1;"></div>
