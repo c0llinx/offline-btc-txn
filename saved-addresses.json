@@ -1,0 +1,137 @@
+{
+  "tb1pxwwldnh53retpdrqnz5rragwr3wz63xjkhfghqkeqcnk0z0pf27qgwf5m3": {
+    "address": "tb1pxwwldnh53retpdrqnz5rragwr3wz63xjkhfghqkeqcnk0z0pf27qgwf5m3",
+    "privateKey": "IMPORTED_ADDRESS_NO_PRIVATE_KEY",
+    "publicKey": "IMPORTED_ADDRESS_NO_PUBLIC_KEY",
+    "scriptHash": "imported_address_script_hash",
+    "balance": 144359,
+    "lastChecked": "2025-07-23T08:56:15.640Z",
+    "calculations": [
+      {
+        "num1": 10,
+        "num2": 5,
+        "operation": "add",
+        "result": 15,
+        "txid": "",
+        "fee": 0,
+        "rawTx": "",
+        "timestamp": "2025-07-23T07:31:11.143Z",
+        "broadcastStatus": "pending",
+        "confirmationStatus": "unconfirmed"
+      }
+    ]
+  },
+  "tb1px7pae7zq02duvr4agu4pf0nfcsj639k5cl4w28ngmw6efuwt2x2qu65vyt": {
+    "address": "tb1px7pae7zq02duvr4agu4pf0nfcsj639k5cl4w28ngmw6efuwt2x2qu65vyt",
+    "privateKey": "cNq2ZnsxUL5oGns4K56KCj8URjhbNrhBrL7csLuu6tpKuTCnLWcd",
+    "publicKey": "0299e9c2976d4177ee0a06ae179b9b1228437c56d6267b2e467b075a837522f317",
+    "scriptHash": "2019a167142588fcd4e24671060494f90249a96e6507d4cf849cc48d43f7978d",
+    "balance": 0,
+    "lastChecked": "2025-07-23T08:56:18.980Z",
+    "calculations": [
+      {
+        "num1": 20,
+        "num2": 3,
+        "operation": "multiply",
+        "result": 60,
+        "txid": "",
+        "fee": 0,
+        "rawTx": "",
+        "timestamp": "2025-07-23T07:31:13.624Z",
+        "broadcastStatus": "pending",
+        "confirmationStatus": "unconfirmed"
+      }
+    ]
+  },
+  "tb1p4fuxteqjltq7mkrgszckdm88p4efva73p9r50kq65fj7q3gjpnkqapmdzh": {
+    "address": "tb1p4fuxteqjltq7mkrgszckdm88p4efva73p9r50kq65fj7q3gjpnkqapmdzh",
+    "privateKey": "cS8ZqJWDDfcLuypEx7qBfLcYyc5paQtwxRmVgq7bmAtNRGx1tYei",
+    "publicKey": "0362c7197b6f3e02bd5f16a8bfee0920c2298518a487d13c1e12c90b00331a91f5",
+    "scriptHash": "28b8591f09f543332d7c60b679df555d718cf2d81a9c41976109eeb4ffb9a225",
+    "balance": 196973,
+    "lastChecked": "2025-07-23T08:56:21.282Z",
+    "calculations": [
+      {
+        "num1": 10,
+        "num2": 4,
+        "operation": "multiply",
+        "result": 40,
+        "txid": "",
+        "fee": 0,
+        "rawTx": "",
+        "timestamp": "2025-07-23T07:31:15.925Z",
+        "broadcastStatus": "pending",
+        "confirmationStatus": "unconfirmed"
+      }
+    ]
+  },
+  "tb1prqls86llsr9fvm28hqtzdhxuayq3w6duy47yys7pdsnlxhn953tsh38hlc": {
+    "address": "tb1prqls86llsr9fvm28hqtzdhxuayq3w6duy47yys7pdsnlxhn953tsh38hlc",
+    "privateKey": "cRiHqx6GSbrdKjtWUcA6LXwnkqnERoJEZYjCa931tDiLjCdh4FS2",
+    "publicKey": "0326db20d4c0f05ab5a741d09225549aae4cac7236afe516de873fd6cce89a7600",
+    "scriptHash": "7a1b2611fff5ef0ac1be8d60f27dfac17990b1f421798312e3f10b9e1ad84022",
+    "balance": 131267,
+    "lastChecked": "2025-07-23T08:52:43.077Z",
+    "calculations": [
+      {
+        "num1": 10,
+        "num2": 2,
+        "operation": "divide",
+        "result": 5,
+        "txid": "",
+        "fee": 0,
+        "rawTx": "",
+        "timestamp": "2025-07-23T07:33:40.960Z",
+        "broadcastStatus": "pending",
+        "confirmationStatus": "unconfirmed"
+      },
+      {
+        "num1": 10,
+        "num2": 5,
+        "operation": "multiply",
+        "result": 50,
+        "txid": "010881c3c7fefeaa4b124e5b1e4f233cf0b0b6e1132a31e3252cd06a31d70b30",
+        "fee": 1680,
+        "rawTx": "020000000001025989636655325cb284077ddff3a4c8a39bf21f8ad6773df80149ac5926625b870000000000ffffffff5989636655325cb284077ddff3a4c8a39bf21f8ad6773df80149ac5926625b870100000000ffffffff0283de010000000000225120183f03ebff80ca966d47b81626dcdce9011769bc257c4243c16c27f35e65a457602f000000000000225120183f03ebff80ca966d47b81626dcdce9011769bc257c4243c16c27f35e65a4570140f90c1814b21e02d111cd536600ae6d581326aee68d7506cbe6d28379a2b07c5e489907b2ce465a60d30380002e173e56eceae34f394ae7cd206e4c4159fceb47014079984bead7c164f695b52720f6f14399ef74abf262714644e0fccf222ea26ec2e10358fb4e01dbaa44e951415d8df72ec77c5bc4a62ae7a502d388b35b27c0c600000000",
+        "timestamp": "2025-07-23T08:48:18.762Z",
+        "broadcastStatus": "success",
+        "confirmationStatus": "unconfirmed"
+      },
+      {
+        "num1": 10,
+        "num2": 10,
+        "operation": "add",
+        "result": 20,
+        "txid": "854cf117e33047e315c662f7a40c3521fea276f21801b363819feac10c4d4da0",
+        "fee": 1680,
+        "rawTx": "02000000000102300bd7316ad02c25e3312a13e1b6b0f03c234f1e5b4e124baafefec7c38108010000000000ffffffff300bd7316ad02c25e3312a13e1b6b0f03c234f1e5b4e124baafefec7c38108010100000000ffffffff02fdd5010000000000225120183f03ebff80ca966d47b81626dcdce9011769bc257c4243c16c27f35e65a4575631000000000000225120183f03ebff80ca966d47b81626dcdce9011769bc257c4243c16c27f35e65a4570140a962f0ebf6989be1297ceab6b9ed7a9d9e4b769f4ac060994e142f27f2d92871c8c3c1f6bc15a30dadee8a9312e4320d5e49fee0a75e61529239be13c26a800401402aed38b18eeba9241e1cbc56b9fc061697d8eff73a3e53c6fe636209ef5536965461e558d3324494dddb88b04dca3ac9ecb052a02269bc4813692ec183c0e51f00000000",
+        "timestamp": "2025-07-23T08:50:08.015Z",
+        "broadcastStatus": "success",
+        "confirmationStatus": "unconfirmed"
+      },
+      {
+        "num1": 10,
+        "num2": 2,
+        "operation": "subtract",
+        "result": 8,
+        "txid": "f3def4191e7683a9a67f1dc31505d8ebf7b03c1e3fbfccf3b74993cf3d98c578",
+        "fee": 1680,
+        "rawTx": "02000000000102a04d4d0cc1ea9f8163b30118f276a2fe21350ca4f762c615e34730e317f14c850000000000ffffffffa04d4d0cc1ea9f8163b30118f276a2fe21350ca4f762c615e34730e317f14c850100000000ffffffff02c7d2010000000000225120183f03ebff80ca966d47b81626dcdce9011769bc257c4243c16c27f35e65a457fc2d000000000000225120183f03ebff80ca966d47b81626dcdce9011769bc257c4243c16c27f35e65a4570140e70f10271b0df1bc61f3c4e93bc6fb33029d76c531069eb29f8f0de6e83e1c3b4bf9e9cc66d99a09b24c7ebe2786aafe2270037a562887a0682be847db16ca3401401533f95033f4610a647af7d48e8b7446dc752009eb3e81eed1a7f63d572f32b45ea2e988a329cd9403b65f53b096fd780846eccb8f0e6194c58101c1de57a24000000000",
+        "timestamp": "2025-07-23T08:52:43.078Z",
+        "broadcastStatus": "success",
+        "confirmationStatus": "unconfirmed"
+      }
+    ]
+  },
+  "10_20_add": {
+    "address": "tb1pmw4pqtp8agc9fh0vra2ajqu733797ks5urt7twlnzsw5efhh3vkss46467",
+    "privateKey": "cRF9kZG1t6T2eRnAA1WnCwj75bCDpmVLCMQkqe4QWbaGkBRRSw4W",
+    "publicKey": "0306f372e55b9e71cfa777a1032f95bb5c96d573fe842fcc4dfb8d6c7c5b19a864",
+    "scriptHash": "291c74a9c404576b7d8d18a739b1926ec39c77494a1dd52ebe1f028267f5e7d8",
+    "num1": 10,
+    "num2": 20,
+    "operation": "add",
+    "balance": 0,
+    "lastChecked": "2025-07-23T08:56:24.010Z"
+  }
+}

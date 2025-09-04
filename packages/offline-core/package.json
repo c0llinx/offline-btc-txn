@@ -1,0 +1,25 @@
+{
+  "name": "@offline/core",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "main": "src/index.js",
+  "license": "MIT",
+  "sideEffects": false,
+  "scripts": {
+    "build": "echo 'Nothing to build (JS only)'",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "bitcoinjs-lib": "^6.1.5",
+    "tiny-secp256k1": "^2.2.3",
+    "bip32": "^5.2.0",
+    "bip39": "^3.1.0",
+    "cbor-x": "^1.5.8",
+    "@keystonehq/ur-encoder": "^1.4.0",
+    "@keystonehq/ur-decoder": "^1.4.0"
+  },
+  "devDependencies": {
+    "vitest": "^1.6.0"
+  }
+}

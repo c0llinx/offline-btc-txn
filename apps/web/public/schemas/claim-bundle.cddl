@@ -1,0 +1,19 @@
+; claim-bundle@1
+
+claim-bundle = {
+  ver: 1,
+  h_alg: "sha256",
+  preimage: bytes .size 32 / null,
+  h: bytes .size 32,
+  R_pub: bytes .size 32,
+  script: bytes,
+  leaf_ver: uint,
+  control: bytes,
+  fund_txid: bytes .size 32 / null,
+  vout: uint / null,
+  expires_at: uint,
+  meta: {
+    amount_sat: uint,
+    memo: tstr / null
+  } / null
+}

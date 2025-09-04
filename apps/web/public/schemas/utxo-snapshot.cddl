@@ -1,0 +1,17 @@
+; utxo-snapshot@1
+
+utxo-snapshot = {
+  ver: 1,
+  height: uint,
+  tip: bytes .size 32,
+  feerates: { normal: uint, fast: uint, urgent: uint },
+  utxos: [* utxo ],
+  change_tmpl: bytes / tstr
+}
+
+utxo = {
+  txid: bytes .size 32,
+  vout: uint,
+  value: uint,
+  script_template: bytes / null
+}
