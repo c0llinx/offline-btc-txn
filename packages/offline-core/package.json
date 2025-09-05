@@ -13,11 +13,10 @@
   "dependencies": {
     "bitcoinjs-lib": "^6.1.5",
     "tiny-secp256k1": "^2.2.3",
-    "bip32": "^5.2.0",
+    "bip32": "5.0.0-rc.0",
     "bip39": "^3.1.0",
     "cbor-x": "^1.5.8",
-    "@keystonehq/ur-encoder": "^1.4.0",
-    "@keystonehq/ur-decoder": "^1.4.0"
+    "@ngraveio/bc-ur": "^1.1.13"
   },
   "devDependencies": {
     "vitest": "^1.6.0"

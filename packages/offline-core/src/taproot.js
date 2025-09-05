@@ -17,7 +17,9 @@ export function generateBurnedInternalKey() {
     const p = ecc.pointFromScalar(d, true);
     if (p) {
       // x-only coordinate
-      return p.slice(1, 33);
+      const xonly = p.slice(1, 33);
+      // Ensure Buffer type for bitcoinjs-lib type checks
+      return Buffer.from(xonly);
     }
   }
   throw new Error('Failed to derive internal key');
@@ -25,11 +27,13 @@ export function generateBurnedInternalKey() {
 
 export function buildClaimScript(R_xonly, h32) {
   const OPS = bitcoin.opcodes;
+  const R = Buffer.from(R_xonly);
+  const h = Buffer.from(h32);
   return bitcoin.script.compile([
     OPS.OP_SHA256,
-    h32,
+    h,
     OPS.OP_EQUALVERIFY,
-    R_xonly,
+    R,
     OPS.OP_CHECKSIG,
   ]);
 }
@@ -37,11 +41,12 @@ export function buildClaimScript(R_xonly, h32) {
 export function buildRefundScript(H_exp, S_xonly) {
   const OPS = bitcoin.opcodes;
   const cltv = bitcoin.script.number.encode(H_exp);
+  const S = Buffer.from(S_xonly);
   return bitcoin.script.compile([
     cltv,
     OPS.OP_CHECKLOCKTIMEVERIFY,
     OPS.OP_DROP,
-    S_xonly,
+    S,
     OPS.OP_CHECKSIG,
   ]);
 }
