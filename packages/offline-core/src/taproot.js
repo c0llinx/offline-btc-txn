@@ -1,6 +1,5 @@
 import * as bitcoin from 'bitcoinjs-lib';
-import * as ecc from 'tiny-secp256k1';
-import { randomBytes } from 'crypto';
+import * as ecc from '@bitcoinerlab/secp256k1';
 
 bitcoin.initEccLib(ecc);
 
@@ -10,15 +9,23 @@ export const NETWORKS = {
   mainnet: bitcoin.networks.bitcoin,
 };
 
+function random32() {
+  if (typeof globalThis !== 'undefined' && globalThis.crypto && typeof globalThis.crypto.getRandomValues === 'function') {
+    const a = new Uint8Array(32);
+    globalThis.crypto.getRandomValues(a);
+    return a;
+  }
+  const a = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) a[i] = (Math.floor(Math.random() * 256)) & 0xff; // non-crypto fallback
+  return a;
+}
+
 export function generateBurnedInternalKey() {
-  let d;
-  for (let i = 0; i < 8; i++) {
-    d = randomBytes(32);
+  for (let i = 0; i < 128; i++) {
+    const d = random32();
     const p = ecc.pointFromScalar(d, true);
     if (p) {
-      // x-only coordinate
       const xonly = p.slice(1, 33);
-      // Ensure Buffer type for bitcoinjs-lib type checks
       return Buffer.from(xonly);
     }
   }

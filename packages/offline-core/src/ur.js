@@ -4,7 +4,8 @@ import { UR, UREncoder, URDecoder } from '@ngraveio/bc-ur';
 // Returns a small wrapper with a nextPart() function that yields 'ur:...' strings.
 export function encodeUR(type, payloadBytes, maxFragmentLength = 800) {
   // Create a UR from raw CBOR bytes using the v1.1.13 API
-  const ur = UR.fromBuffer(payloadBytes, type);
+  // Some builds ignore the optional type in fromBuffer; construct explicitly
+  const ur = new UR(payloadBytes, type);
   const encoder = new UREncoder(ur, maxFragmentLength);
 
   // Pre-compute an estimated number of parts (pure fragments count)

@@ -1,6 +1,6 @@
 import { test, expect } from 'vitest';
 import * as bitcoin from 'bitcoinjs-lib';
-import * as ecc from 'tiny-secp256k1';
+import * as ecc from '@bitcoinerlab/secp256k1';
 import { randomBytes } from 'crypto';
 import { buildClaimScript, buildRefundScript, buildClaimRefundTaproot, NETWORKS } from '../src/index.js';
 

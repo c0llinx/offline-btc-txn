@@ -2,10 +2,13 @@
 
 import { useMemo, useRef, useState } from "react";
 import { encode as cborEncode, decode as cborDecode } from "cbor-x";
-import { encodeUR, decodeUR } from "@offline/core/src/ur.js";
-import { parseClaimBundle } from "@offline/interop/src/parse-claim-bundle.js";
+import { encodeUR, decodeUR } from "@offline/core";
+import { parseClaimBundle } from "@offline/interop";
+import * as bitcoin from 'bitcoinjs-lib';
+import * as ecc from '@bitcoinerlab/secp256k1';
 
 export default function Receiver() {
+  useMemo(() => { try { bitcoin.initEccLib(ecc); } catch {} }, []);
   const [message, setMessage] = useState("hello offline bitcoin");
   const [fragmentLen, setFragmentLen] = useState(60);
   const [parts, setParts] = useState([]);
@@ -19,6 +22,31 @@ export default function Receiver() {
   const [claimParts, setClaimParts] = useState([]);
   const [claimParsed, setClaimParsed] = useState(null);
   const [claimErr, setClaimErr] = useState("");
+
+  // Claim Tx builder state
+  const [fundTxId, setFundTxId] = useState("");
+  const [fundVout, setFundVout] = useState(0);
+  const [prevoutScriptHex, setPrevoutScriptHex] = useState("");
+  const [prevoutValue, setPrevoutValue] = useState(0);
+  const [destAddress, setDestAddress] = useState("");
+  const [destValue, setDestValue] = useState(0);
+  const [feeRate, setFeeRate] = useState(2);
+  const [claimPsbtB64, setClaimPsbtB64] = useState("");
+  const [claimPsbtUR, setClaimPsbtUR] = useState("");
+  const [claimBuildErr, setClaimBuildErr] = useState("");
+  const [guidedOpen, setGuidedOpen] = useState(true);
+  const [changeAddress, setChangeAddress] = useState("");
+  const [estVsize, setEstVsize] = useState(151);
+  const [estFee, setEstFee] = useState(302);
+  const [estNote, setEstNote] = useState("");
+
+  // Decode funding tx helper (no auto-fill)
+  const [helperNet, setHelperNet] = useState('testnet');
+  const [txHex, setTxHex] = useState('');
+  const [targetAddr, setTargetAddr] = useState('');
+  const [txDecodeErr, setTxDecodeErr] = useState('');
+  const [decodedOuts, setDecodedOuts] = useState([]);
+  const [decodedTxid, setDecodedTxid] = useState('');
 
   const partCount = useMemo(() => parts.length, [parts]);
 
@@ -63,6 +91,152 @@ export default function Receiver() {
     out.set(bytes, header.length);
     return out;
   }
+
+  function estimateVsize(outCount) {
+    // Approximate: 1-in taproot script-path + 1-out ~151 vB; each extra output ~31 vB
+    return 151 + Math.max(0, outCount - 1) * 31;
+  }
+
+  function handleEstimate() {
+    try {
+      const outCount = (changeAddress || '').trim() ? 2 : 1;
+      const v = estimateVsize(outCount);
+      const f = Math.ceil(v * (Number(feeRate) || 1));
+      setEstVsize(v);
+      setEstFee(f);
+      setEstNote(`vsize≈${v} vB · fee≈${f} sats (@${Number(feeRate)||1} sat/vB)`);
+      // If no change is provided, auto-fill destination to prevout - estFee
+      if (!(changeAddress||'').trim()) {
+        const pv = Number(prevoutValue) || 0;
+        if (pv > 0) setDestValue(Math.max(0, pv - f));
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+  
+  function hexToU8(hex) {
+    const h = (hex || '').trim().replace(/^0x/i, '');
+    if (h.length % 2) throw new Error('hex length must be even');
+    const arr = new Uint8Array(h.length / 2);
+    for (let i = 0; i < arr.length; i++) arr[i] = parseInt(h.slice(2*i, 2*i+2), 16);
+    return arr;
+  }
+
+  function networkForKey(k) {
+    if (k === 'mainnet') return bitcoin.networks.bitcoin;
+    return bitcoin.networks.testnet; // use testnet params for both testnet and signet
+  }
+
+  function addressFromScript(outputScript, network) {
+    try { const p = bitcoin.payments.p2tr({ output: outputScript, network }); if (p?.address) return p.address; } catch {}
+    try { const p = bitcoin.payments.p2wpkh({ output: outputScript, network }); if (p?.address) return p.address; } catch {}
+    try { const p = bitcoin.payments.p2wsh({ output: outputScript, network }); if (p?.address) return p.address; } catch {}
+    try { const p = bitcoin.payments.p2pkh({ output: outputScript, network }); if (p?.address) return p.address; } catch {}
+    try { const p = bitcoin.payments.p2sh({ output: outputScript, network }); if (p?.address) return p.address; } catch {}
+    return null;
+  }
+
+  function handleDecodeTx() {
+    try {
+      setTxDecodeErr('');
+      setDecodedOuts([]);
+      setDecodedTxid('');
+      const hex = (txHex || '').trim();
+      if (!hex) throw new Error('Paste a raw transaction hex');
+      const net = networkForKey(helperNet);
+      const tx = bitcoin.Transaction.fromHex(hex);
+      try { setDecodedTxid(tx.getId()); } catch {}
+      const outs = tx.outs.map((o, i) => {
+        const scriptHex = Buffer.from(o.script).toString('hex');
+        const addr = addressFromScript(o.script, net);
+        const isTarget = targetAddr && addr && addr.trim() === targetAddr.trim();
+        return { i, value: o.value, scriptHex, address: addr, isTarget };
+      });
+      setDecodedOuts(outs);
+    } catch (e) {
+      setTxDecodeErr(String(e?.message || e));
+    }
+  }
+
+  async function handleBuildClaimPsbt() {
+    try {
+      setClaimBuildErr("");
+      setClaimPsbtB64("");
+      setClaimPsbtUR("");
+      if (!claimParsed) throw new Error('Decode a claim-bundle first');
+      if (!fundTxId || typeof fundTxId !== 'string') throw new Error('Funding txid required');
+      let hash = fundTxId.trim();
+      // If user pasted raw tx hex here by mistake, derive txid
+      if (!/^[0-9a-fA-F]{64}$/.test(hash)) {
+        try {
+          const tx = bitcoin.Transaction.fromHex(hash);
+          hash = tx.getId();
+        } catch {
+          throw new Error('Funding txid must be 64 hex chars (txid). If you pasted raw tx hex, use the helper above to decode and copy the txid.');
+        }
+      }
+      const index = Number(fundVout) >>> 0;
+      if (!prevoutScriptHex || prevoutScriptHex.length < 8) throw new Error('Prevout scriptHex required');
+      const script = Buffer.from(prevoutScriptHex.trim(), 'hex');
+      const value = Number(prevoutValue) >>> 0;
+      if (!(value > 0)) throw new Error('Prevout value (sats) must be > 0');
+      if (!destAddress) throw new Error('Destination address required');
+      const outVal = Number(destValue) >>> 0;
+      if (outVal <= 0) throw new Error('Destination value must be > 0');
+      const psbt = new bitcoin.Psbt({ network: bitcoin.networks.testnet });
+      const tapLeafScript = [{
+        leafVersion: claimParsed.leaf_ver >>> 0,
+        script: Buffer.from(claimParsed.script),
+        controlBlock: Buffer.from(claimParsed.control || []),
+      }];
+      psbt.addInput({
+        hash,
+        index,
+        witnessUtxo: { script, value },
+        tapLeafScript,
+      });
+      // Fee and optional change
+      const outCount = (changeAddress || '').trim() ? 2 : 1;
+      const vsize = estimateVsize(outCount);
+      const fee = Math.ceil(vsize * (Number(feeRate) || 1));
+      if (!(changeAddress||'').trim()) {
+        // One-output flow: user should have set dest = prevout - fee; still allow any value
+        if (outVal > value) throw new Error('Destination value exceeds prevout');
+        psbt.addOutput({ address: destAddress.trim(), value: outVal });
+      } else {
+        // Two-output flow with change
+        if (!changeAddress || typeof changeAddress !== 'string') throw new Error('Change address required or leave it blank');
+        const changeVal = value - outVal - fee;
+        if (changeVal < 0) throw new Error('Destination + estimated fee exceed prevout. Lower destination or fee rate.');
+        const DUST = 546; // conservative threshold for small outputs
+        if (changeVal < DUST) throw new Error('Computed change is below dust threshold; reduce destination or remove change.');
+        psbt.addOutput({ address: destAddress.trim(), value: outVal });
+        psbt.addOutput({ address: changeAddress.trim(), value: changeVal });
+      }
+      const b64 = psbt.toBase64();
+      setClaimPsbtB64(b64);
+      const ur = encodeUR('crypto-psbt', psbt.toBuffer(), 180);
+      const parts = [];
+      const seen = new Set();
+      let guard = 0;
+      while (guard < 200) {
+        const p = ur.nextPart();
+        if (!seen.has(p)) { parts.push(p); seen.add(p); }
+        try {
+          await decodeUR(parts);
+          break; // full set
+        } catch (e) {
+          if (!String(e).includes('UR not complete')) break; // other error
+        }
+        guard++;
+      }
+      setClaimPsbtUR(parts.join('\n'));
+    } catch (e) {
+      setClaimBuildErr(String(e?.message || e));
+    }
+  }
+  
 
   async function handleEncode() {
     setError("");
@@ -299,6 +473,45 @@ export default function Receiver() {
     }
   }
 
+  async function handleClaimDecode() {
+    try {
+      setClaimErr("");
+      setClaimParsed(null);
+      const lines = (claimInput || "")
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+      if (!lines.length) throw new Error("Paste one or more UR parts");
+      const urParts = lines.filter((l) => l.toLowerCase().startsWith("ur:"));
+      if (!urParts.length) throw new Error("No UR parts detected (expected lines starting with 'ur:')");
+      setClaimParts(urParts);
+      const out = await decodeUR(urParts);
+      const urType = String(out?.type || '').toLowerCase();
+      if (urType !== 'claim-bundle') {
+        throw new Error(`Wrong UR type: expected 'claim-bundle' but got '${out?.type || 'unknown'}'`);
+      }
+      const toU8 = (x) => {
+        if (x instanceof Uint8Array) return x;
+        if (x && typeof x === "object") {
+          if (x.type === "Buffer" && Array.isArray(x.data)) return Uint8Array.from(x.data);
+          if (x.buffer instanceof ArrayBuffer && typeof x.byteLength === "number") {
+            const offset = x.byteOffset || 0;
+            const length = x.byteLength;
+            return new Uint8Array(x.buffer, offset, length);
+          }
+          if (Array.isArray(x)) return Uint8Array.from(x);
+        }
+        try { return new Uint8Array(x); } catch {}
+        throw new Error("Unsupported CBOR byte source");
+      };
+      const cborBytes = toU8(out.cbor);
+      const parsed = parseClaimBundle(cborBytes);
+      setClaimParsed(parsed);
+    } catch (e) {
+      setClaimErr(String(e?.message || e));
+    }
+  }
+
   function handleReset() {
     setParts([]);
     setDecoded(null);
@@ -313,6 +526,82 @@ export default function Receiver() {
       <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-600 text-white">RECEIVER</div>
       <h1 className="text-2xl font-semibold">Receiver</h1>
       <p className="text-zinc-500">Import Claim Bundle (UR), wait for funding confirmation, build claim tx, and broadcast.</p>
+
+      <section className="rounded-lg border p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="font-medium">Guided Mode</h2>
+          <button onClick={()=>setGuidedOpen(v=>!v)} className="text-sm px-2 py-1 rounded border">{guidedOpen ? 'Hide' : 'Show'}</button>
+        </div>
+        {guidedOpen && (
+          <div className="text-sm text-zinc-700 space-y-2">
+            <ol className="list-decimal pl-5 space-y-2">
+              <li>Paste ALL Claim Bundle UR lines below and click <b>Decode Claim</b>.</li>
+              <li>Fund the Taproot address shown on the Cold page (same network you used to generate the bundle; signet is fine).</li>
+              <li>After funding, fetch prevout details for the output that paid your address:
+                <ul className="list-disc pl-5 mt-1 space-y-1">
+                  <li><span className="font-mono">txid</span> — the funding transaction id</li>
+                  <li><span className="font-mono">vout</span> — the index of the output that paid your address</li>
+                  <li><span className="font-mono">value</span> — output value in sats</li>
+                  <li><span className="font-mono">scriptpubkey_hex</span> — paste here as <b>Prevout script (hex)</b> (P2TR script, usually starts with <span className="font-mono">5120…</span>)</li>
+                </ul>
+                <div className="text-xs text-zinc-500">Explorer links: <a className="text-blue-600 underline" href="https://mempool.space/signet" target="_blank" rel="noreferrer">mempool.space/signet</a> · <a className="text-blue-600 underline" href="https://mempool.space/testnet" target="_blank" rel="noreferrer">/testnet</a></div>
+              </li>
+              <li>Fill the form in <b>Build Claim PSBT</b> and click the button. You’ll get base64 and a UR for signing.</li>
+              <li>Use a signer to provide the preimage for <span className="font-mono">h</span> and a Schnorr signature with <span className="font-mono">R</span>, finalize, then broadcast.</li>
+            </ol>
+            <p className="text-xs text-zinc-500">Note: The PSBT network parameter uses testnet defaults; for signet addresses this is acceptable for PSBT construction. Broadcast should target a signet endpoint.</p>
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-lg border p-4 space-y-3">
+        <h2 className="font-medium">Decode Funding TX (helper)</h2>
+        <p className="text-sm text-zinc-500">Paste your funding tx hex and (optionally) the Taproot address. This lists all outputs so you can identify the correct vout/value/script. No auto-fill is performed.</p>
+        <div className="grid md:grid-cols-2 gap-3">
+          <label className="space-y-1">
+            <div className="text-sm text-zinc-500">Network</div>
+            <select className="w-full rounded border px-3 py-2" value={helperNet} onChange={e=>setHelperNet(e.target.value)}>
+              <option value="signet">signet</option>
+              <option value="testnet">testnet</option>
+              <option value="mainnet">mainnet</option>
+            </select>
+          </label>
+          <label className="space-y-1">
+            <div className="text-sm text-zinc-500">Target address (optional)</div>
+            <input className="w-full rounded border px-3 py-2" value={targetAddr} onChange={e=>setTargetAddr(e.target.value)} placeholder="tb1p... (or bc1p...)" />
+          </label>
+          <label className="space-y-1 md:col-span-2">
+            <div className="text-sm text-zinc-500">Raw transaction hex</div>
+            <textarea className="w-full rounded border px-3 py-2 font-mono min-h-[100px]" value={txHex} onChange={e=>setTxHex(e.target.value)} />
+          </label>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={handleDecodeTx} className="px-3 py-2 rounded bg-blue-600 text-white">Decode TX</button>
+          {!!txDecodeErr && <div className="text-sm text-red-600">{txDecodeErr}</div>}
+        </div>
+        {(decodedTxid || decodedOuts.length > 0) && (
+          <div className="text-sm space-y-2">
+            {decodedTxid && (
+              <div>
+                <div className="text-zinc-500">Computed TXID</div>
+                <div className="font-mono break-all">{decodedTxid}</div>
+              </div>
+            )}
+            {decodedOuts.length > 0 && <div className="text-zinc-500">Outputs ({decodedOuts.length})</div>}
+            <div className="grid gap-2">
+              {decodedOuts.map(o => (
+                <div key={o.i} className={`text-xs rounded border p-2 ${o.isTarget ? 'bg-emerald-50 border-emerald-300' : 'bg-zinc-50'}`}>
+                  <div><b>vout</b>: {o.i} {o.isTarget && <span className="text-emerald-700">(matches target)</span>}</div>
+                  <div><b>value (sats)</b>: {o.value}</div>
+                  <div><b>address</b>: <span className="font-mono">{o.address || 'n/a'}</span></div>
+                  <div><b>script (hex)</b>: <span className="font-mono break-all">{o.scriptHex}</span></div>
+                </div>
+              ))}
+            </div>
+            <div className="text-xs text-zinc-500">Copy the vout, value, and script (hex) for the output paying your Taproot address and paste into the Build Claim PSBT section below.</div>
+          </div>
+        )}
+      </section>
 
       <section className="rounded-lg border p-4 space-y-3">
         <h2 className="font-medium">Claim Bundle</h2>
@@ -334,6 +623,68 @@ export default function Receiver() {
           </div>
         )}
       </section>
+
+      {claimParsed && (
+        <section className="rounded-lg border p-4 space-y-3">
+          <h2 className="font-medium">Build Claim PSBT</h2>
+          <p className="text-sm text-zinc-500">Provide the funding UTXO details and destination. This constructs a tapscript spend using the claim leaf/script and control block from the bundle.</p>
+          <div className="grid md:grid-cols-2 gap-3">
+            <label className="space-y-1 md:col-span-2">
+              <div className="text-sm text-zinc-500">Funding txid (hex)</div>
+              <input className="w-full rounded border px-3 py-2 font-mono" value={fundTxId} onChange={e=>setFundTxId(e.target.value)} />
+            </label>
+            <label className="space-y-1">
+              <div className="text-sm text-zinc-500">vout</div>
+              <input type="number" className="w-full rounded border px-3 py-2" value={fundVout} onChange={e=>setFundVout(Number(e.target.value)||0)} />
+            </label>
+            <label className="space-y-1">
+              <div className="text-sm text-zinc-500">Prevout value (sats)</div>
+              <input type="number" className="w-full rounded border px-3 py-2" value={prevoutValue} onChange={e=>setPrevoutValue(Number(e.target.value)||0)} />
+            </label>
+            <label className="space-y-1 md:col-span-2">
+              <div className="text-sm text-zinc-500">Prevout script (hex) — P2TR output script</div>
+              <input className="w-full rounded border px-3 py-2 font-mono" value={prevoutScriptHex} onChange={e=>setPrevoutScriptHex(e.target.value)} placeholder="e.g., 5120..." />
+            </label>
+            <label className="space-y-1">
+              <div className="text-sm text-zinc-500">Destination address</div>
+              <input className="w-full rounded border px-3 py-2" value={destAddress} onChange={e=>setDestAddress(e.target.value)} />
+            </label>
+            <label className="space-y-1">
+              <div className="text-sm text-zinc-500">Destination value (sats)</div>
+              <input type="number" className="w-full rounded border px-3 py-2" value={destValue} onChange={e=>setDestValue(Number(e.target.value)||0)} />
+            </label>
+            <label className="space-y-1">
+              <div className="text-sm text-zinc-500">Fee rate (sat/vB)</div>
+              <input type="number" className="w-full rounded border px-3 py-2" value={feeRate} onChange={e=>setFeeRate(Number(e.target.value)||1)} />
+            </label>
+            <label className="space-y-1">
+              <div className="text-sm text-zinc-500">Change address (optional)</div>
+              <input className="w-full rounded border px-3 py-2" value={changeAddress} onChange={e=>setChangeAddress(e.target.value)} placeholder="Leave blank to send all (minus fee)" />
+            </label>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={handleEstimate} type="button" className="px-3 py-2 rounded border">Estimate Fee</button>
+            <button onClick={handleBuildClaimPsbt} className="px-3 py-2 rounded bg-blue-600 text-white">Build Claim PSBT</button>
+            {!!claimBuildErr && <div className="text-sm text-red-600">{claimBuildErr}</div>}
+          </div>
+          {estNote && (
+            <div className="text-xs text-zinc-500">{estNote}</div>
+          )}
+          {claimPsbtB64 && (
+            <div className="text-sm space-y-1">
+              <div className="text-zinc-500">Claim PSBT (base64)</div>
+              <textarea className="w-full rounded border px-3 py-2 font-mono min-h-[80px]" readOnly value={claimPsbtB64} />
+            </div>
+          )}
+          {claimPsbtUR && (
+            <div className="text-sm space-y-1">
+              <div className="text-zinc-500">Claim PSBT (UR part)</div>
+              <textarea className="w-full rounded border px-3 py-2 font-mono min-h-[80px]" readOnly value={claimPsbtUR} />
+              <div className="text-xs text-zinc-500">Transfer this to a signer that can provide a Schnorr signature for R and the preimage for h.</div>
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="rounded-lg border p-4 space-y-4">
         <h2 className="font-medium">UR Smoke Test</h2>
