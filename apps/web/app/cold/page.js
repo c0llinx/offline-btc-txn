@@ -9,7 +9,7 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 export default function Cold() {
   const [status, setStatus] = useState('checking...');
   // Claim/Refund generator state
-  const [networkKey, setNetworkKey] = useState('signet');
+  const [networkKey, setNetworkKey] = useState('testnet');
   const [RHex, setRHex] = useState(''); // x-only 32-byte hex
   const [SHex, setSHex] = useState(''); // x-only 32-byte hex
   const [message, setMessage] = useState('hello offline bitcoin');
@@ -279,7 +279,7 @@ export default function Cold() {
           <div className="text-sm text-zinc-700 space-y-2">
             <ol className="list-decimal pl-5 space-y-2">
               <li>
-                Choose network (signet/testnet/mainnet). For your case use <span className="font-mono">signet</span>.
+                Choose network (signet/testnet/mainnet). For your case use <span className="font-mono">testnet</span>.
               </li>
               <li>
                 Decide keys:

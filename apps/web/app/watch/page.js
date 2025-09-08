@@ -5,7 +5,7 @@ import { useState } from 'react';
 export const dynamic = 'force-dynamic';
 
 export default function Watch() {
-  const [endpoint, setEndpoint] = useState('https://mempool.space/signet');
+  const [endpoint, setEndpoint] = useState('https://mempool.space/testnet');
   const [hex, setHex] = useState('');
   const [status, setStatus] = useState('idle');
   const [result, setResult] = useState(null);
@@ -35,7 +35,7 @@ export default function Watch() {
     <main className="space-y-6">
       <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-600 text-white">WATCH‑ONLY</div>
       <h1 className="text-2xl font-semibold">Watch‑Only (Online Messenger)</h1>
-      <p className="text-zinc-500">Broadcast signed transactions to Signet. Paste raw tx hex below.</p>
+      <p className="text-zinc-500">Broadcast signed transactions to testnet. Paste raw tx hex below.</p>
 
       <section className="rounded-lg border p-4 space-y-3">
         <label className="space-y-1 block">
