@@ -6,7 +6,7 @@ export interface UTXO {
    * vout is the output index of this utxo within
    * the transaction
    **/
-  vout: string;
+  vout: number;
   amount: Satoshi;
   /**
    * address refers to the bitcoin address that owns

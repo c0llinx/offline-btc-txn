@@ -11,7 +11,15 @@ export enum BitcoinNetwork {
 export function MapToBitcoinNetwork(network: BitcoinNetwork): Network {
   const networkMap = new Map<BitcoinNetwork, Network>([
     [BitcoinNetwork.Mainnet, networks.bitcoin],
+    [BitcoinNetwork.Testnet, networks.testnet],
+    [BitcoinNetwork.Regtest, networks.regtest],
+    [BitcoinNetwork.Signet, networks.regtest],
   ]);
+  const mappedNetwork = networkMap.get(network);
+  if (mappedNetwork === undefined) {
+    throw new Error(`Unsupported Bitcoin network: ${network}`);
+  }
+  return mappedNetwork;
 }
 
 export class NetworkConfig {

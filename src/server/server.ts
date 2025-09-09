@@ -3,7 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import cors from 'cors';
 import { TaprootCalculatorService } from './calculator.js';
-import { OfflineWorkflowService } from './workflow.js';
+import { OfflineWorkflowService } from './workflow.ts';
 import { RealBitcoinCalculator } from './bitcoin.js';
 import { MempoolAPI } from './mempool.js';
 import { CalculationRequest } from '../shared/types.js';
@@ -359,7 +359,10 @@ app.use(
  * Sender: create initial funding PSBT (QR Code A + B)
  */
 // Simple in-memory wallet store for demo - in production, use encrypted database
-const walletStore = new Map<string, { privateKey: string; publicKey: string; name?: string }>();
+const walletStore = new Map<
+  string,
+  { privateKey: string; publicKey: string; name?: string }
+>();
 
 app.post('/api/create-sender-transaction', async (req, res) => {
   try {
@@ -469,14 +472,26 @@ app.post('/api/wallet/create', async (req, res) => {
 
     switch (addressType) {
       case 'p2wpkh':
-        address = bitcoin.payments.p2wpkh({ pubkey: keyPair.publicKey, network: bitcoin.networks.testnet }).address!;
+        address = bitcoin.payments.p2wpkh({
+          pubkey: keyPair.publicKey,
+          network: bitcoin.networks.testnet,
+        }).address!;
         break;
       case 'p2tr':
-        address = bitcoin.payments.p2tr({ internalPubkey: keyPair.publicKey.slice(1, 33), network: bitcoin.networks.testnet }).address!;
+        address = bitcoin.payments.p2tr({
+          internalPubkey: keyPair.publicKey.slice(1, 33),
+          network: bitcoin.networks.testnet,
+        }).address!;
         break;
       case 'p2sh':
-        const p2wpkh = bitcoin.payments.p2wpkh({ pubkey: keyPair.publicKey, network: bitcoin.networks.testnet });
-        address = bitcoin.payments.p2sh({ redeem: p2wpkh, network: bitcoin.networks.testnet }).address!;
+        const p2wpkh = bitcoin.payments.p2wpkh({
+          pubkey: keyPair.publicKey,
+          network: bitcoin.networks.testnet,
+        });
+        address = bitcoin.payments.p2sh({
+          redeem: p2wpkh,
+          network: bitcoin.networks.testnet,
+        }).address!;
         break;
       default:
         return res.status(400).json({ error: 'Invalid address type' });
@@ -489,21 +504,26 @@ app.post('/api/wallet/create', async (req, res) => {
       publicKey: keyPair.publicKey.toString('hex'),
       addressType,
       balance: 0,
-      created: new Date().toISOString()
+      created: new Date().toISOString(),
     };
 
     // Automatically register in HTLC wallet store for seamless integration
     walletStore.set(address, {
       privateKey: wallet.privateKey,
       publicKey: wallet.publicKey,
-      name: wallet.name
+      name: wallet.name,
     });
-    
+
     console.log(`✅ Auto-registered wallet for HTLC use: ${address}`);
 
     res.json(wallet);
   } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to create wallet' });
+    res
+      .status(500)
+      .json({
+        error:
+          error instanceof Error ? error.message : 'Failed to create wallet',
+      });
   }
 });
 
@@ -517,14 +537,17 @@ app.post('/api/wallet/register', async (req, res) => {
 
     // Validate private key and derive address to verify match
     const keyPair = ECPair.fromWIF(privateKey, bitcoin.networks.testnet);
-    const p2wpkh = bitcoin.payments.p2wpkh({ pubkey: keyPair.publicKey, network: bitcoin.networks.testnet });
+    const p2wpkh = bitcoin.payments.p2wpkh({
+      pubkey: keyPair.publicKey,
+      network: bitcoin.networks.testnet,
+    });
     const derivedAddress = p2wpkh.address!;
-    
+
     if (derivedAddress !== address) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Private key does not match the provided address',
         provided: address,
-        derived: derivedAddress
+        derived: derivedAddress,
       });
     }
 
@@ -532,19 +555,24 @@ app.post('/api/wallet/register', async (req, res) => {
     walletStore.set(address, {
       privateKey,
       publicKey: keyPair.publicKey.toString('hex'),
-      name: name || `Wallet-${address.slice(-8)}`
+      name: name || `Wallet-${address.slice(-8)}`,
     });
 
     console.log(`✅ Registered wallet: ${address}`);
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       address,
       publicKey: keyPair.publicKey.toString('hex'),
-      message: 'Wallet registered successfully'
+      message: 'Wallet registered successfully',
     });
   } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to register wallet' });
+    res
+      .status(500)
+      .json({
+        error:
+          error instanceof Error ? error.message : 'Failed to register wallet',
+      });
   }
 });
 
@@ -553,7 +581,7 @@ app.get('/api/wallet/registered', (req, res) => {
   const wallets = Array.from(walletStore.entries()).map(([address, data]) => ({
     address,
     publicKey: data.publicKey,
-    name: data.name
+    name: data.name,
   }));
   res.json({ wallets });
 });
@@ -567,11 +595,14 @@ app.post('/api/wallet/import', async (req, res) => {
     }
 
     const keyPair = ECPair.fromWIF(privateKey, bitcoin.networks.testnet);
-    
+
     // Try to determine address type and create address
-    const p2wpkh = bitcoin.payments.p2wpkh({ pubkey: keyPair.publicKey, network: bitcoin.networks.testnet });
+    const p2wpkh = bitcoin.payments.p2wpkh({
+      pubkey: keyPair.publicKey,
+      network: bitcoin.networks.testnet,
+    });
     const address = p2wpkh.address!;
-    
+
     // Check balance
     const balanceInfo = await mempoolAPI.checkAddressBalance(address, 0);
 
@@ -582,21 +613,26 @@ app.post('/api/wallet/import', async (req, res) => {
       publicKey: keyPair.publicKey.toString('hex'),
       addressType: 'p2wpkh' as const,
       balance: balanceInfo.availableBalance,
-      created: new Date().toISOString()
+      created: new Date().toISOString(),
     };
 
     // Automatically register in HTLC wallet store for seamless integration
     walletStore.set(address, {
       privateKey: wallet.privateKey,
       publicKey: wallet.publicKey,
-      name: wallet.name
+      name: wallet.name,
     });
-    
+
     console.log(`✅ Auto-registered imported wallet for HTLC use: ${address}`);
 
     res.json(wallet);
   } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to import wallet' });
+    res
+      .status(500)
+      .json({
+        error:
+          error instanceof Error ? error.message : 'Failed to import wallet',
+      });
   }
 });
 
@@ -629,21 +665,29 @@ app.post('/api/wallet/refresh-balances', async (req, res) => {
           address,
           balance: balanceInfo.availableBalance,
           confirmed: balanceInfo.confirmedBalance,
-          unconfirmed: balanceInfo.unconfirmedBalance
+          unconfirmed: balanceInfo.unconfirmedBalance,
         });
-        console.log(`🔄 Refreshed balance: ${address} = ${balanceInfo.availableBalance} sats`);
+        console.log(
+          `🔄 Refreshed balance: ${address} = ${balanceInfo.availableBalance} sats`
+        );
       } catch (error) {
         balanceResults.push({
           address,
           balance: 0,
-          error: error instanceof Error ? error.message : 'Failed to fetch balance'
+          error:
+            error instanceof Error ? error.message : 'Failed to fetch balance',
         });
       }
     }
 
     res.json({ balances: balanceResults });
   } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to refresh balances' });
+    res
+      .status(500)
+      .json({
+        error:
+          error instanceof Error ? error.message : 'Failed to refresh balances',
+      });
   }
 });
 
@@ -660,36 +704,44 @@ app.post('/api/wallet/send', async (req, res) => {
     try {
       utxos = await mempoolAPI.getAddressUTXOs(fromAddress);
     } catch (error) {
-      return res.status(400).json({ 
-        error: 'Mempool API unavailable. Cannot verify UTXOs. Please try again later or fund the address first.',
-        details: 'The mempool.space API is currently experiencing issues (502 errors)',
-        fundingInstructions: 'Fund your address at: https://testnet-faucet.mempool.co/'
+      return res.status(400).json({
+        error:
+          'Mempool API unavailable. Cannot verify UTXOs. Please try again later or fund the address first.',
+        details:
+          'The mempool.space API is currently experiencing issues (502 errors)',
+        fundingInstructions:
+          'Fund your address at: https://testnet-faucet.mempool.co/',
       });
     }
-    
+
     if (utxos.length === 0) {
       return res.status(400).json({
-        error: 'No UTXOs found for this address. Please fund the address using testnet faucets first.',
-        fundingInstructions: 'Visit: https://testnet-faucet.mempool.co/ and send testnet Bitcoin to: ' + fromAddress,
+        error:
+          'No UTXOs found for this address. Please fund the address using testnet faucets first.',
+        fundingInstructions:
+          'Visit: https://testnet-faucet.mempool.co/ and send testnet Bitcoin to: ' +
+          fromAddress,
         faucetLinks: [
           'https://testnet-faucet.mempool.co/',
           'https://bitcoinfaucet.uo1.net/',
-          'https://coinfaucet.eu/en/btc-testnet/'
-        ]
+          'https://coinfaucet.eu/en/btc-testnet/',
+        ],
       });
     }
 
     const psbt = new bitcoin.Psbt({ network: bitcoin.networks.testnet });
     const totalInput = utxos.reduce((sum, utxo) => sum + utxo.value, 0);
     const fee = Math.max(1000, Math.ceil(feeRate * 200)); // Rough fee estimate
-    
+
     if (totalInput < amount + fee) {
-      throw new Error(`Insufficient funds. Required: ${amount + fee}, Available: ${totalInput}`);
+      throw new Error(
+        `Insufficient funds. Required: ${amount + fee}, Available: ${totalInput}`
+      );
     }
 
     // Determine address type to use correct input format
     const isP2TR = fromAddress.startsWith('tb1p');
-    
+
     // Add inputs with proper format for address type
     for (const utxo of utxos) {
       if (isP2TR) {
@@ -727,23 +779,32 @@ app.post('/api/wallet/send', async (req, res) => {
 
     // Sign and finalize
     try {
-      console.log(`Signing transaction for ${isP2TR ? 'P2TR' : 'P2WPKH'} address`);
+      console.log(
+        `Signing transaction for ${isP2TR ? 'P2TR' : 'P2WPKH'} address`
+      );
       psbt.signAllInputs(keyPair);
       psbt.finalizeAllInputs();
-      
+
       const tx = psbt.extractTransaction();
       console.log('Transaction created successfully, broadcasting...');
-      
+
       const txid = await mempoolAPI.broadcastTransaction(tx.toHex());
       const explorerUrl = mempoolAPI.getMempoolURL(txid);
 
       res.json({ txid, fee, explorerUrl });
     } catch (signError) {
       console.error('Transaction signing/broadcast error:', signError);
-      throw new Error(`Transaction creation failed: ${signError instanceof Error ? signError.message : 'Unknown signing error'}`);
+      throw new Error(
+        `Transaction creation failed: ${signError instanceof Error ? signError.message : 'Unknown signing error'}`
+      );
     }
   } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to send transaction' });
+    res
+      .status(500)
+      .json({
+        error:
+          error instanceof Error ? error.message : 'Failed to send transaction',
+      });
   }
 });
 
@@ -754,7 +815,11 @@ app.get('/api/wallet/history/:address', async (req, res) => {
     // For now, return empty array - can be enhanced to fetch actual history from mempool API
     res.json({ transactions: [] });
   } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get history' });
+    res
+      .status(500)
+      .json({
+        error: error instanceof Error ? error.message : 'Failed to get history',
+      });
   }
 });
 
@@ -766,7 +831,12 @@ app.get('/api/block-height', async (req, res) => {
     const health = await mempoolAPI.checkNetworkHealth();
     res.json({ blockHeight: health.blockHeight });
   } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get block height' });
+    res
+      .status(500)
+      .json({
+        error:
+          error instanceof Error ? error.message : 'Failed to get block height',
+      });
   }
 });
 

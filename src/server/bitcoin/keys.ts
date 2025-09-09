@@ -1,5 +1,5 @@
 import BIP32Factory from 'bip32';
-import { BitcoinNetwork, MapToBitcoinNetwork } from './networks.ts';
+import { BitcoinNetwork, MapToBitcoinNetwork } from './networks';
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from 'bip39';
 import * as ecc from 'tiny-secp256k1';
 
@@ -36,7 +36,7 @@ export class HDWallet {
     this.xpriv = masterKey.toBase58();
   }
 
-  private generateMasterExtendedPublicKey(): string {
+  public generateMasterExtendedPublicKey(): string {
     let bip32Factory = BIP32Factory(ecc);
     const masterKey = bip32Factory.fromBase58(this.xpriv);
     const pubKey = masterKey.neutered().toBase58();
