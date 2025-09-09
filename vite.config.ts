@@ -15,6 +15,13 @@ export default defineConfig({
     outDir: 'dist/client',
     sourcemap: true,
     rollupOptions: {
+      input: {
+        app: 'src/client/app.ts',
+        wallet: 'src/client/wallet.ts'
+      },
+      output: {
+        entryFileNames: '[name].js'
+      },
       external: ['bitcoinjs-lib', 'ecpair', 'tiny-secp256k1']
     }
   },

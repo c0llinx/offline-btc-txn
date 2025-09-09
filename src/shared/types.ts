@@ -57,6 +57,9 @@ export interface OfflineTxoData {
   taprootAddress: string;
   txid: string;
   vout: number;
+  senderPublicKey?: string; // Optional sender public key for HTLC
+  refundTimeLock?: number; // Optional refund timelock for HTLC
+  value?: number; // Optional value for HTLC
 }
 
 /**

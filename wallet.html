@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bitcoin Testnet Wallet</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .header h1 {
+            color: #0d6efd;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .nav-links {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .nav-links a {
+            display: inline-block;
+            padding: 10px 20px;
+            margin: 0 10px;
+            background: #6c757d;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+
+        .nav-links a:hover {
+            background: #5a6268;
+        }
+
+        .nav-links a.active {
+            background: #0d6efd;
+        }
+
+        .wallet-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .wallet-section {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 10px;
+            border: 1px solid #e9ecef;
+        }
+
+        .wallet-section h2 {
+            color: #495057;
+            margin-bottom: 20px;
+            font-size: 1.4rem;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none;
+            border-color: #0d6efd;
+        }
+
+        .btn {
+            background: #0d6efd;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s;
+            width: 100%;
+        }
+
+        .btn:hover {
+            background: #0b5ed7;
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .btn-success {
+            background: #198754;
+        }
+
+        .btn-success:hover {
+            background: #157347;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+        }
+
+        .btn-danger:hover {
+            background: #bb2d3b;
+        }
+
+        .wallet-info {
+            background: #e7f3ff;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border-left: 5px solid #0d6efd;
+        }
+
+        .address-display {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 1px solid #dee2e6;
+            font-family: monospace;
+            word-break: break-all;
+        }
+
+        .balance {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #198754;
+            margin: 10px 0;
+        }
+
+        .transaction-list {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+        }
+
+        .transaction-item {
+            padding: 15px;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .transaction-item:last-child {
+            border-bottom: none;
+        }
+
+        .tx-info {
+            flex: 1;
+        }
+
+        .tx-amount {
+            font-weight: bold;
+            color: #198754;
+        }
+
+        .tx-amount.negative {
+            color: #dc3545;
+        }
+
+        .tx-id {
+            font-family: monospace;
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+
+        .qr-display {
+            text-align: center;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 1px solid #f5c6cb;
+        }
+
+        .success {
+            background: #d1e7dd;
+            color: #0f5132;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 1px solid #badbcc;
+        }
+
+        .loading {
+            text-align: center;
+            color: #0d6efd;
+            font-weight: bold;
+            padding: 20px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .copy-btn {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+
+        .copy-btn:hover {
+            background: #5a6268;
+        }
+
+        .wallet-tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .tab-btn {
+            padding: 10px 20px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            color: #6c757d;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .tab-btn.active {
+            color: #0d6efd;
+            border-bottom-color: #0d6efd;
+            font-weight: 600;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            
+            .container {
+                padding: 15px;
+                border-radius: 10px;
+            }
+            
+            .header h1 {
+                font-size: 1.8rem;
+            }
+            
+            .wallet-grid {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+            
+            .wallet-section {
+                padding: 15px;
+            }
+            
+            .wallet-tabs {
+                flex-wrap: wrap;
+                justify-content: space-around;
+            }
+            
+            .tab-btn {
+                padding: 8px 12px;
+                font-size: 14px;
+                margin: 2px;
+                min-width: 80px;
+            }
+            
+            .nav-links a {
+                display: block;
+                margin: 5px 0;
+                padding: 12px 20px;
+                font-size: 14px;
+            }
+            
+            .form-group input, .form-group select, .form-group textarea {
+                padding: 15px;
+                font-size: 16px;
+            }
+            
+            .btn {
+                padding: 15px 20px;
+                font-size: 16px;
+                margin-bottom: 10px;
+            }
+            
+            .address-display {
+                padding: 10px;
+                font-size: 12px;
+            }
+            
+            .copy-btn {
+                padding: 8px 12px;
+                font-size: 12px;
+                margin-top: 8px;
+                display: block;
+                width: 100%;
+            }
+            
+            .transaction-list {
+                max-height: 300px;
+            }
+            
+            .transaction-item {
+                flex-direction: column;
+                align-items: flex-start;
+                padding: 10px;
+            }
+            
+            .qr-display {
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🪙 Bitcoin Testnet Wallet</h1>
+            <p class="subtitle">Full-featured testnet wallet with address generation, transaction management, and HTLC support</p>
+        </div>
+
+        <div class="nav-links">
+            <a href="wallet.html" class="active">Wallet</a>
+            <a href="index.html">HTLC Contracts</a>
+        </div>
+
+        <div class="wallet-tabs">
+            <button class="tab-btn active" data-tab="overview">Overview</button>
+            <button class="tab-btn" data-tab="create">Create Wallet</button>
+            <button class="tab-btn" data-tab="import">Import Wallet</button>
+            <button class="tab-btn" data-tab="send">Send</button>
+            <button class="tab-btn" data-tab="receive">Receive</button>
+            <button class="tab-btn" data-tab="history">History</button>
+        </div>
+
+        <!-- Overview Tab -->
+        <div id="overview-tab" class="tab-content active">
+            <div class="wallet-grid">
+                <div class="wallet-section">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                        <h2>Current Wallet</h2>
+                        <button class="btn btn-secondary btn-sm d-flex align-items-center justify-content-center" id="refresh-balance-btn" style="width: 28px; height: 28px; padding: 0; font-size: 16px;">🔄</button>
+                    </div>
+                    
+                    <div class="form-group" style="margin-bottom: 20px;">
+                        <label for="wallet-selector" style="display: block; margin-bottom: 8px; font-weight: 600;">Select Wallet:</label>
+                        <select id="wallet-selector" style="width: 100%; padding: 10px; border: 2px solid #dee2e6; border-radius: 8px; font-size: 16px;">
+                            <option value="">Choose a wallet...</option>
+                        </select>
+                    </div>
+                    
+                    <div id="current-wallet-info">
+                        <p>No wallet selected. Choose a wallet from the dropdown above.</p>
+                    </div>
+                </div>
+                <div class="wallet-section">
+                    <h2>Quick Actions</h2>
+                    <button class="btn" data-tab="receive" style="margin-bottom: 10px;">Receive Bitcoin</button>
+                    <button class="btn btn-success" data-tab="send">Send Bitcoin</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Create Wallet Tab -->
+        <div id="create-tab" class="tab-content">
+            <div class="wallet-section">
+                <h2>Create New Wallet</h2>
+                <form id="create-wallet-form">
+                    <div class="form-group">
+                        <label>Wallet Name:</label>
+                        <input type="text" name="wallet-name" placeholder="My Testnet Wallet" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Address Type:</label>
+                        <select name="address-type">
+                            <option value="p2wpkh">P2WPKH (Native SegWit - tb1q...)</option>
+                            <option value="p2tr">P2TR (Taproot - tb1p...)</option>
+                            <option value="p2sh">P2SH (SegWit - 2...)</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn">Create Wallet</button>
+                </form>
+                <div id="new-wallet-result"></div>
+            </div>
+        </div>
+
+        <!-- Import Wallet Tab -->
+        <div id="import-tab" class="tab-content">
+            <div class="wallet-section">
+                <h2>Import Existing Wallet</h2>
+                <form id="import-wallet-form">
+                    <div class="form-group">
+                        <label>Wallet Name:</label>
+                        <input type="text" name="wallet-name" placeholder="Imported Wallet" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Private Key (WIF):</label>
+                        <textarea name="private-key" placeholder="cT32zctxiFBYEeoHzwEBL8fJK3szS2PpnyuGSMuVNKfpVMPryyBN" rows="3" required></textarea>
+                    </div>
+                    <button type="submit" class="btn">Import Wallet</button>
+                </form>
+                <div id="import-wallet-result"></div>
+            </div>
+        </div>
+
+        <!-- Send Tab -->
+        <div id="send-tab" class="tab-content">
+            <div class="wallet-section">
+                <h2>Send Bitcoin</h2>
+                <form id="send-form">
+                    <div class="form-group">
+                        <label>Recipient Address:</label>
+                        <input type="text" name="recipient-address" placeholder="tb1q..." required>
+                    </div>
+                    <div class="form-group">
+                        <label>Amount (satoshis):</label>
+                        <input type="number" name="amount" min="546" placeholder="10000" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Fee Rate (sat/vB):</label>
+                        <input type="number" name="fee-rate" value="10" min="1" required>
+                    </div>
+                    <button type="submit" class="btn">Create Transaction</button>
+                </form>
+                <div id="send-result"></div>
+            </div>
+        </div>
+
+        <!-- Receive Tab -->
+        <div id="receive-tab" class="tab-content">
+            <div class="wallet-section">
+                <h2>Receive Bitcoin</h2>
+                <div id="receive-address-info">
+                    <p>Load a wallet first to generate receiving addresses.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- History Tab -->
+        <div id="history-tab" class="tab-content">
+            <div class="wallet-section">
+                <h2>Transaction History</h2>
+                <div id="transaction-history">
+                    <p>Load a wallet to view transaction history.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading overlay -->
+        <div id="loading" class="loading hidden">
+            <div>⏳ Processing...</div>
+        </div>
+
+        <!-- Error display -->
+        <div id="error-display" class="hidden"></div>
+    </div>
+
+    <script src="https://unpkg.com/qrcode@1.5.4/build/qrcode.min.js"></script>
+    <script>
+        console.log('Inline script loading...');
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM ready - inline script');
+        });
+    </script>
+    <script src="wallet.js" type="module"></script>
+</body>
+</html>

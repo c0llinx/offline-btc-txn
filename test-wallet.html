@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Wallet</title>
+</head>
+<body>
+    <h1>Test Wallet Page</h1>
+    <button id="test-btn">Test Button</button>
+    <button class="tab-btn" data-tab="overview">Overview Tab</button>
+    <div id="overview-tab" style="display: none;">Overview Content</div>
+    <div id="create-tab" style="display: none;">Create Content</div>
+    
+    <script>
+        console.log('Test script loading...');
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM loaded');
+            
+            // Test button
+            const testBtn = document.getElementById('test-btn');
+            console.log('Test button found:', !!testBtn);
+            testBtn?.addEventListener('click', () => {
+                alert('Test button works!');
+            });
+            
+            // Tab buttons
+            const tabButtons = document.querySelectorAll('.tab-btn');
+            console.log('Tab buttons found:', tabButtons.length);
+            tabButtons.forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    console.log('Tab clicked');
+                    const tabName = (e.target as HTMLElement).getAttribute('data-tab');
+                    console.log('Tab name:', tabName);
+                    alert('Tab clicked: ' + tabName);
+                });
+            });
+        });
+    </script>
+</body>
+</html>

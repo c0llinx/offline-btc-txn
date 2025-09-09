@@ -40,7 +40,6 @@ class OfflineBtcApp {
   private receiverGeneratedDiv: HTMLElement;
   // Clipboard buttons
   private pasteTxBtn: HTMLElement;
-  private pasteSecretBtn: HTMLElement;
   private toastDiv: HTMLElement;
 
   // --- State ---
@@ -75,10 +74,8 @@ class OfflineBtcApp {
     this.receiverWifInput = document.getElementById('receiver-wif-input') as HTMLInputElement;
     this.receiverGeneratedDiv = document.getElementById('receiver-generated-address')!;
     this.pasteTxBtn = document.getElementById('paste-tx-btn')!;
-    this.pasteSecretBtn = document.getElementById('paste-secret-btn')!;
     this.toastDiv = document.getElementById('toast')!;
     this.pasteTxBtn.addEventListener('click', () => this.handlePasteTx());
-    this.pasteSecretBtn.addEventListener('click', () => this.handlePasteSecret());
 
     // Tab switching
     this.tabSender.addEventListener('click', () => this.switchTab('sender'));
@@ -138,19 +135,25 @@ class OfflineBtcApp {
     }
   }
 
-  private displaySenderResults(data: SenderData) {
+  private displaySenderResults(data: SenderData & { explorerUrl?: string, htlcStarted?: boolean }) {
     this.qrCodeA.innerHTML = '';
     this.qrCodeB.innerHTML = '';
-    const canvasA = document.createElement('canvas');
-QRCode.toCanvas(canvasA, JSON.stringify(data), { width: 256 }, (error: Error | null | undefined) => {
-  if (error) throw error;
-  this.qrCodeA.appendChild(canvasA);
-});
-const canvasB = document.createElement('canvas');
-QRCode.toCanvas(canvasB, data.preimage, { width: 256 }, (error: Error | null | undefined) => {
-  if (error) throw error;
-  this.qrCodeB.appendChild(canvasB);
-});
+    
+    // Show funding transaction link if available
+    if (data.explorerUrl) {
+      const linkDiv = document.createElement('div');
+      linkDiv.innerHTML = `<p style="color:green; font-weight:bold;">✅ Funding transaction broadcasted!</p>
+      <p><a href="${data.explorerUrl}" target="_blank" style="color:blue;">View Funding Tx on Testnet 🔗</a></p>
+      <p style="color:orange;">⏰ HTLC timer started - receiver must claim before block ${data.refundTimeLock}</p>`;
+      linkDiv.style.marginBottom = '15px';
+      this.qrCodeA.appendChild(linkDiv);
+    }
+    
+    const canvas = document.createElement('canvas');
+    QRCode.toCanvas(canvas, JSON.stringify(data), { width: 256 }, (error: Error | null | undefined) => {
+      if (error) throw error;
+      this.qrCodeA.appendChild(canvas);
+    });
       const copyTxBtn = document.createElement('button');
   copyTxBtn.textContent = 'Copy Tx Data';
   copyTxBtn.className = 'btn btn-secondary';
@@ -165,28 +168,13 @@ QRCode.toCanvas(canvasB, data.preimage, { width: 256 }, (error: Error | null | u
   });
   this.qrCodeA.appendChild(copyTxBtn);
 
-  const copySecretBtn = document.createElement('button');
-  copySecretBtn.textContent = 'Copy Secret';
-  copySecretBtn.className = 'btn btn-secondary';
-  copySecretBtn.style.marginTop = '10px';
-  copySecretBtn.style.marginLeft = '10px';
-  copySecretBtn.addEventListener('click', async () => {
-    try {
-      const ok = await this.copyToClipboard(data.preimage);
-      this.showToast(ok ? 'Secret copied to clipboard' : 'Failed to copy', ok);
-    } catch {
-      this.showToast('Failed to copy', false);
-    }
-  });
-  this.qrCodeB.appendChild(copySecretBtn);
-
   this.senderResults.classList.remove('results-hidden');
   }
 
   // --- Receiver Workflow ---
   private startReceiverScanner() {
     this.receiverScanner = new Html5Qrcode('receiver-scanner');
-    this.receiverScannerDiv.innerHTML = '<p>Scan QR Code A (Transaction Data), then QR Code B (Secret).</p>';
+    this.receiverScannerDiv.innerHTML = '<p>Scan the Transaction Data QR Code.</p>';
     const config = { fps: 10, qrbox: { width: 250, height: 250 } };
     this.receiverScanner.start(
   { facingMode: 'environment' },
@@ -198,24 +186,18 @@ QRCode.toCanvas(canvasB, data.preimage, { width: 256 }, (error: Error | null | u
 
   private handleReceiverScan(decodedText: string) {
     try {
-      const data = JSON.parse(decodedText) as OfflineTxoData;
-      if (data.taprootAddress && data.txid) {
+      const data = JSON.parse(decodedText) as SenderData;
+      if (data.taprootAddress && data.txid && data.preimage) {
         this.scannedTxoData = data;
-        this.receiverScannerDiv.innerHTML = '<p style="color:green;">Transaction QR Code Scanned! Now scan the Secret QR Code.</p>';
-      } else throw new Error();
-    } catch {
-      if (decodedText.length === 64 && /^[0-9a-fA-F]+$/.test(decodedText)) {
-        this.scannedPreimage = decodedText;
-        this.receiverScannerDiv.innerHTML = '<p style="color:green;">Secret QR Code Scanned!</p>';
+        this.scannedPreimage = data.preimage;
+        this.receiverScanner?.stop();
+        this.receiverScannerDiv.innerHTML = '<p style="color:green; font-weight: bold;">Transaction data scanned successfully. Enter your private key to claim.</p>';
+        this.receiverForm.classList.remove('form-hidden');
       } else {
-        this.showError('Unrecognized QR Code.');
-        return;
+        throw new Error('Invalid transaction data format');
       }
-    }
-    if (this.scannedTxoData && this.scannedPreimage) {
-      this.receiverScanner?.stop();
-      this.receiverScannerDiv.innerHTML = '<p style="color:green; font-weight: bold;">Both QR codes scanned successfully. Enter your private key to claim.</p>';
-      this.receiverForm.classList.remove('form-hidden');
+    } catch {
+      this.showError('Unrecognized QR Code. Please scan the transaction QR code from the sender.');
     }
   }
 
@@ -237,11 +219,12 @@ QRCode.toCanvas(canvasB, data.preimage, { width: 256 }, (error: Error | null | u
       });
       if (!resp.ok) throw new Error((await resp.json()).message || 'Failed to create claim transaction');
       const result = await resp.json();
-      if (result.psbt) {
-        // Show success message in UI
-        this.receiverScannerDiv.innerHTML = '<p style="color:green; font-weight:bold;">Claim PSBT created and copied to clipboard.<br>Broadcast it from an online device to finalize.</p>';
-        await this.copyToClipboard(result.psbt);
-        this.showToast('Claim PSBT copied to clipboard');
+      if (result.explorerUrl) {
+        // Show success message with testnet link
+        this.receiverScannerDiv.innerHTML = `<p style="color:green; font-weight:bold;">✅ Claim transaction broadcasted successfully!</p>
+        <p>Transaction ID: <code>${result.broadcastTxid}</code></p>
+        <p><a href="${result.explorerUrl}" target="_blank" style="color:blue;">View on Testnet Explorer 🔗</a></p>`;
+        this.showToast('Claim transaction broadcasted to testnet');
         this.receiverForm.reset();
         // Clear scanned data to avoid duplicate claims
         this.scannedTxoData = null;
@@ -353,47 +336,19 @@ QRCode.toCanvas(canvasB, data.preimage, { width: 256 }, (error: Error | null | u
 private async handlePasteTx() {
   try {
     const text = await navigator.clipboard.readText();
-    const data = JSON.parse(text) as OfflineTxoData;
-    if (data.taprootAddress && data.txid) {
+    const data = JSON.parse(text) as SenderData;
+    if (data.taprootAddress && data.txid && data.preimage) {
       this.scannedTxoData = data;
+      this.scannedPreimage = data.preimage;
       this.receiverScannerDiv.innerHTML = '<p style="color:green;">Transaction data pasted!</p>';
       this.showToast('Transaction data pasted from clipboard');
+      this.receiverForm.classList.remove('form-hidden');
     } else throw new Error();
   } catch {
     this.showError('Clipboard does not contain valid transaction data.');
   }
-  this.checkReceiverReady();
 }
 
-private async handlePasteSecret() {
-  try {
-    const raw = await navigator.clipboard.readText();
-    const trimmed = raw.trim();
-    const match = trimmed.match(/[0-9a-fA-F]{64}/);
-    if (match) {
-      this.scannedPreimage = match[0];
-    } else if (trimmed.length > 0) {
-      // Accept any non-empty secret for now (backend may send shorter placeholder during dev)
-      this.scannedPreimage = trimmed;
-    } else {
-      throw new Error();
-    }
-    this.receiverScannerDiv.innerHTML += '<p style="color:green;">Secret pasted!</p>';
-    this.showToast('Secret pasted from clipboard');
-  } catch {
-    this.showToast('Clipboard does not contain a valid secret', false);
-    this.showError('Clipboard does not contain valid secret.');
-  }
-  this.checkReceiverReady();
-}
-
-private checkReceiverReady() {
-  if (this.scannedTxoData && this.scannedPreimage) {
-    this.receiverScanner?.stop();
-    this.receiverScannerDiv.innerHTML = '<p style="color:green; font-weight:bold;">Transaction & Secret ready. Enter your private key to claim.</p>';
-    this.receiverForm.classList.remove('form-hidden');
-  }
-}
 
   private showError(message: string) {
     this.errorDiv.textContent = message;

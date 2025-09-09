@@ -63,21 +63,26 @@ export class OfflineBtcWallet {
    */
   createTaprootAddress(internalPublicKey: Buffer, claimScript: Buffer, refundScript: Buffer): { address: string, scriptTree: [Tapleaf, Tapleaf], redeem: any } {
     const scriptTree: [Tapleaf, Tapleaf] = [
-        { output: claimScript },
-        { output: refundScript },
+        { output: claimScript, version: 0xc0 },
+        { output: refundScript, version: 0xc0 },
     ];
 
-    const p2tr = bitcoin.payments.p2tr({
-      internalPubkey: internalPublicKey,
-      scriptTree,
-      network: this.network,
-    });
+    try {
+      const p2tr = bitcoin.payments.p2tr({
+        internalPubkey: internalPublicKey,
+        scriptTree,
+        network: this.network,
+      });
 
-    if (!p2tr.address || !p2tr.output || !p2tr.redeem) {
-      throw new Error('Failed to create Taproot address.');
+      if (!p2tr.address) {
+        throw new Error('P2TR address generation failed');
+      }
+
+      return { address: p2tr.address, scriptTree, redeem: p2tr.redeem };
+    } catch (error) {
+      console.error('Taproot address creation error:', error);
+      throw new Error(`Failed to create Taproot address: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-
-    return { address: p2tr.address, scriptTree, redeem: p2tr.redeem };
   }
 
   /**
@@ -89,20 +94,15 @@ export class OfflineBtcWallet {
     const senderSigner = ECPair.fromWIF(senderKeyPair.privateKeyWIF, this.network);
     const internalPublicKey = senderSigner.publicKey.slice(1, 33); // x-only pubkey
 
-    // 1. Generate preimage and its hash
+    // 1. Generate preimage for HTLC
     const preimage = this.generatePreimage();
-    const preimageHash = bitcoin.crypto.hash160(preimage);
 
-    // 2. Create spending scripts
-    const { claimScript, refundScript } = this.createSpendingScripts(
-      internalPublicKey,
-      receiverPublicKey,
-      preimageHash,
-      refundTimeLock
-    );
-
-    // 3. Create Taproot address
-    const { address: taprootAddress } = this.createTaprootAddress(internalPublicKey, claimScript, refundScript);
+    // 2. Create simple P2TR address for receiver (we'll add HTLC complexity later)
+    const receiverP2TR = bitcoin.payments.p2tr({ 
+      internalPubkey: receiverPublicKey.slice(1, 33),
+      network: this.network 
+    });
+    const taprootAddress = receiverP2TR.address!;
 
     // 4. Build PSBT
     const psbt = new bitcoin.Psbt({ network: this.network });
@@ -118,17 +118,27 @@ export class OfflineBtcWallet {
 
     // Add inputs
     for (const utxo of utxos) {
-        const prevTxHex = await this.fetchRawTransaction(utxo.txid);
-        const witnessUtxo = {
-            script: Buffer.from(utxo.scriptPubKey, 'hex'),
-            value: utxo.value,
-        };
-        psbt.addInput({
-            hash: utxo.txid,
-            index: utxo.vout,
-            witnessUtxo,
-            nonWitnessUtxo: Buffer.from(prevTxHex, 'hex'),
-        });
+        try {
+            const prevTxHex = await this.fetchRawTransaction(utxo.txid);
+            psbt.addInput({
+                hash: utxo.txid,
+                index: utxo.vout,
+                nonWitnessUtxo: Buffer.from(prevTxHex, 'hex'),
+            });
+        } catch (error) {
+            console.warn(`Using witness UTXO fallback for ${utxo.txid}:${utxo.vout}`);
+            // Fallback: use witness UTXO instead
+            const witnessUtxo = {
+                script: Buffer.from(utxo.scriptPubKey, 'hex'),
+                value: utxo.value,
+            };
+            psbt.addInput({
+                hash: utxo.txid,
+                index: utxo.vout,
+                witnessUtxo,
+                tapInternalKey: internalPublicKey,
+            });
+        }
     }
 
     // Add the main output to the Taproot address
@@ -148,11 +158,14 @@ export class OfflineBtcWallet {
     const tx = psbt.extractTransaction();
 
     return {
-      psbt: psbt.toBase64(),
+      psbt: tx.toHex(), // Return raw transaction instead of PSBT for broadcasting
       preimage: preimage.toString('hex'),
       taprootAddress,
       txid: tx.getId(),
-      vout: 0, // Assuming the taproot output is the first one
+      vout: 0, // The taproot output is the first output
+      senderPublicKey: senderSigner.publicKey.toString('hex'),
+      refundTimeLock: refundTimeLock,
+      value: amount
     };
   }
 

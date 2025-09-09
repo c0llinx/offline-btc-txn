@@ -1,4 +1,4 @@
-# Real Bitcoin Taproot Calculator
+# Offline Bitcoin Wallet
 
 A complete Bitcoin Taproot calculator that creates **actual Bitcoin testnet transactions** with Tapscript arithmetic operations. This application generates real Bitcoin addresses, builds transactions with embedded calculations, and broadcasts them to the Bitcoin testnet network.
 
