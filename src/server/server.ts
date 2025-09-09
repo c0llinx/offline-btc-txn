@@ -38,10 +38,13 @@ app.get('/api/generate-keypair', (_req, res) => {
     const keyPair = wallet.generateKeyPair();
     res.json({
       wif: keyPair.toWIF(),
-      pubkeyHex: keyPair.publicKey.toString('hex')
+      pubkeyHex: keyPair.publicKey.toString('hex'),
     });
   } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to generate key pair' });
+    res.status(500).json({
+      error:
+        error instanceof Error ? error.message : 'Failed to generate key pair',
+    });
   }
 });
 
@@ -56,12 +59,12 @@ app.get('/api/health', async (req, res) => {
     res.json({
       status: 'healthy',
       timestamp: new Date().toISOString(),
-      network: networkStatus
+      network: networkStatus,
     });
   } catch (error) {
     res.status(500).json({
       status: 'unhealthy',
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 });
@@ -72,18 +75,24 @@ app.get('/api/health', async (req, res) => {
 app.post('/api/generate-address', async (req, res) => {
   try {
     const { num1, num2, operation } = req.body;
-    
+
     if (typeof num1 !== 'number' || typeof num2 !== 'number' || !operation) {
       return res.status(400).json({
-        error: 'Invalid parameters. num1, num2 must be numbers, operation must be specified.'
+        error:
+          'Invalid parameters. num1, num2 must be numbers, operation must be specified.',
       });
     }
 
-    const result = await calculatorService.generateFundingAddress(num1, num2, operation);
+    const result = await calculatorService.generateFundingAddress(
+      num1,
+      num2,
+      operation
+    );
     res.json(result);
   } catch (error) {
     res.status(400).json({
-      error: error instanceof Error ? error.message : 'Failed to generate address'
+      error:
+        error instanceof Error ? error.message : 'Failed to generate address',
     });
   }
 });
@@ -97,7 +106,10 @@ app.get('/api/saved-addresses', async (req, res) => {
     res.json(addresses);
   } catch (error) {
     res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to get saved addresses'
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Failed to get saved addresses',
     });
   }
 });
@@ -112,7 +124,10 @@ app.post('/api/use-address/:calculationKey', async (req, res) => {
     res.json(result);
   } catch (error) {
     res.status(400).json({
-      error: error instanceof Error ? error.message : 'Failed to use existing address'
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Failed to use existing address',
     });
   }
 });
@@ -123,10 +138,16 @@ app.post('/api/use-address/:calculationKey', async (req, res) => {
 app.post('/api/import-address', async (req, res) => {
   try {
     const { address, num1, num2, operation, privateKey } = req.body;
-    
-    if (!address || typeof num1 !== 'number' || typeof num2 !== 'number' || !operation) {
+
+    if (
+      !address ||
+      typeof num1 !== 'number' ||
+      typeof num2 !== 'number' ||
+      !operation
+    ) {
       return res.status(400).json({
-        error: 'Invalid parameters. address, num1, num2, and operation are required.'
+        error:
+          'Invalid parameters. address, num1, num2, and operation are required.',
       });
     }
 
@@ -137,11 +158,12 @@ app.post('/api/import-address', async (req, res) => {
       operation,
       privateKey
     );
-    
+
     res.json(result);
   } catch (error) {
     res.status(400).json({
-      error: error instanceof Error ? error.message : 'Failed to import address'
+      error:
+        error instanceof Error ? error.message : 'Failed to import address',
     });
   }
 });
@@ -153,12 +175,15 @@ app.get('/api/check-funding/:address', async (req, res) => {
   try {
     const { address } = req.params;
     const requiredAmount = parseInt(req.query.amount as string) || 100000;
-    
-    const result = await calculatorService.checkFunding(address, requiredAmount);
+
+    const result = await calculatorService.checkFunding(
+      address,
+      requiredAmount
+    );
     res.json(result);
   } catch (error) {
     res.status(400).json({
-      error: error instanceof Error ? error.message : 'Failed to check funding'
+      error: error instanceof Error ? error.message : 'Failed to check funding',
     });
   }
 });
@@ -169,22 +194,24 @@ app.get('/api/check-funding/:address', async (req, res) => {
 app.post('/api/calculate', async (req, res) => {
   try {
     const calculationRequest: CalculationRequest = req.body;
-    
+
     // Validate request
-    const validation = calculatorService.validateCalculationRequest(calculationRequest);
+    const validation =
+      calculatorService.validateCalculationRequest(calculationRequest);
     if (!validation.isValid) {
       return res.status(400).json({
         error: 'Invalid calculation request',
-        details: validation.errors
+        details: validation.errors,
       });
     }
 
-    const result = await calculatorService.performCalculation(calculationRequest);
+    const result =
+      await calculatorService.performCalculation(calculationRequest);
     res.json(result);
   } catch (error) {
     console.error('Calculation error:', error);
     res.status(500).json({
-      error: error instanceof Error ? error.message : 'Calculation failed'
+      error: error instanceof Error ? error.message : 'Calculation failed',
     });
   }
 });
@@ -195,19 +222,33 @@ app.post('/api/calculate', async (req, res) => {
 app.post('/api/calculate-existing', async (req, res) => {
   try {
     const { address, num1, num2, operation } = req.body;
-    
-    if (!address || typeof num1 !== 'number' || typeof num2 !== 'number' || !operation) {
+
+    if (
+      !address ||
+      typeof num1 !== 'number' ||
+      typeof num2 !== 'number' ||
+      !operation
+    ) {
       return res.status(400).json({
-        error: 'Invalid parameters. address, num1, num2, and operation are required.'
+        error:
+          'Invalid parameters. address, num1, num2, and operation are required.',
       });
     }
 
-    const result = await calculatorService.addCalculationToAddress(address, num1, num2, operation);
+    const result = await calculatorService.addCalculationToAddress(
+      address,
+      num1,
+      num2,
+      operation
+    );
     res.json(result);
   } catch (error) {
     console.error('Address reuse calculation error:', error);
     res.status(400).json({
-      error: error instanceof Error ? error.message : 'Failed to perform calculation on existing address'
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Failed to perform calculation on existing address',
     });
   }
 });
@@ -218,10 +259,10 @@ app.post('/api/calculate-existing', async (req, res) => {
 app.get('/api/transaction/:txid', async (req, res) => {
   try {
     const { txid } = req.params;
-    
+
     if (!/^[a-fA-F0-9]{64}$/.test(txid)) {
       return res.status(400).json({
-        error: 'Invalid transaction ID format'
+        error: 'Invalid transaction ID format',
       });
     }
 
@@ -229,7 +270,10 @@ app.get('/api/transaction/:txid', async (req, res) => {
     res.json(result);
   } catch (error) {
     res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to get transaction status'
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Failed to get transaction status',
     });
   }
 });
@@ -243,7 +287,8 @@ app.get('/api/network-status', async (req, res) => {
     res.json(result);
   } catch (error) {
     res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to get network status'
+      error:
+        error instanceof Error ? error.message : 'Failed to get network status',
     });
   }
 });
@@ -254,23 +299,31 @@ app.get('/api/network-status', async (req, res) => {
 app.post('/api/validate', (req, res) => {
   try {
     const calculationRequest: CalculationRequest = req.body;
-    const result = calculatorService.validateCalculationRequest(calculationRequest);
+    const result =
+      calculatorService.validateCalculationRequest(calculationRequest);
     res.json(result);
   } catch (error) {
     res.status(400).json({
-      error: error instanceof Error ? error.message : 'Validation failed'
+      error: error instanceof Error ? error.message : 'Validation failed',
     });
   }
 });
 
 // Error handling middleware
-app.use((error: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('Unhandled error:', error);
-  res.status(500).json({
-    error: 'Internal server error',
-    message: error.message
-  });
-});
+app.use(
+  (
+    error: Error,
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction
+  ) => {
+    console.error('Unhandled error:', error);
+    res.status(500).json({
+      error: 'Internal server error',
+      message: error.message,
+    });
+  }
+);
 
 // 404 handler
 // --- Offline Workflow Endpoints ---
@@ -281,13 +334,30 @@ app.use((error: Error, req: express.Request, res: express.Response, next: expres
 app.post('/api/create-sender-transaction', async (req, res) => {
   try {
     const { senderWif, receiverAddress, amount, refundLocktime } = req.body;
-    if (!senderWif || !receiverAddress || typeof amount !== 'number' || typeof refundLocktime !== 'number') {
-      return res.status(400).json({ error: 'senderWif, receiverAddress, amount, refundLocktime required' });
+    if (
+      !senderWif ||
+      !receiverAddress ||
+      typeof amount !== 'number' ||
+      typeof refundLocktime !== 'number'
+    ) {
+      return res.status(400).json({
+        error: 'senderWif, receiverAddress, amount, refundLocktime required',
+      });
     }
-    const result = await workflowService.createFundingPSBT(senderWif, receiverAddress, amount, refundLocktime);
+    const result = await workflowService.createFundingPSBT(
+      senderWif,
+      receiverAddress,
+      amount,
+      refundLocktime
+    );
     res.json(result);
   } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to create sender transaction' });
+    res.status(400).json({
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Failed to create sender transaction',
+    });
   }
 });
 
@@ -298,13 +368,28 @@ app.post('/api/create-receiver-claim-transaction', async (req, res) => {
   try {
     const { txoData, preimage, receiverWif } = req.body;
     if (!txoData || !preimage || !receiverWif) {
-      return res.status(400).json({ error: 'txoData, preimage, receiverWif required' });
+      return res
+        .status(400)
+        .json({ error: 'txoData, preimage, receiverWif required' });
     }
     const { txid, vout, value, senderPublicKey, refundTimeLock } = txoData;
-    const result = await workflowService.createClaimPSBT(receiverWif, preimage, txid, vout, value, senderPublicKey, refundTimeLock);
+    const result = await workflowService.createClaimPSBT(
+      receiverWif,
+      preimage,
+      txid,
+      vout,
+      value,
+      senderPublicKey,
+      refundTimeLock
+    );
     res.json(result);
   } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to create claim transaction' });
+    res.status(400).json({
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Failed to create claim transaction',
+    });
   }
 });
 
@@ -318,10 +403,22 @@ app.post('/api/create-sender-refund-transaction', async (req, res) => {
       return res.status(400).json({ error: 'txoData and senderWif required' });
     }
     const { txid, vout, value, receiverPublicKey, refundTimeLock } = txoData;
-    const result = await workflowService.createRefundPSBT(senderWif, txid, vout, value, receiverPublicKey, refundTimeLock);
+    const result = await workflowService.createRefundPSBT(
+      senderWif,
+      txid,
+      vout,
+      value,
+      receiverPublicKey,
+      refundTimeLock
+    );
     res.json(result);
   } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to create refund transaction' });
+    res.status(400).json({
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Failed to create refund transaction',
+    });
   }
 });
 
@@ -330,7 +427,7 @@ app.post('/api/create-sender-refund-transaction', async (req, res) => {
 app.use((req, res) => {
   res.status(404).json({
     error: 'Endpoint not found',
-    path: req.path
+    path: req.path,
   });
 });
 
