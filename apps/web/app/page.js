@@ -5,11 +5,13 @@ export default function Home() {
   return (
     <main className="space-y-6">
       <h1 className="text-3xl font-bold">Offline Bitcoin Wallet — v0.4</h1>
-      <p className="text-zinc-500">Select a mode to begin. Target: Signet.</p>
+      <p className="text-zinc-500">Select a mode to begin. Target: Testnet.</p>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Link className="rounded-2xl p-6 border hover:shadow-md" href="/cold">Cold Mode</Link>
         <Link className="rounded-2xl p-6 border hover:shadow-md" href="/watch">Watch‑Only</Link>
         <Link className="rounded-2xl p-6 border hover:shadow-md" href="/receiver">Receiver</Link>
+        <Link className="rounded-2xl p-6 border hover:shadow-md" href="/signer">Signer</Link>
+        <Link className="rounded-2xl p-6 border hover:shadow-md" href="/tools/address">Address Tool</Link>
       </div>
     </main>
   );

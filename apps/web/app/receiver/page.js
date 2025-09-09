@@ -39,6 +39,7 @@ export default function Receiver() {
   const [estVsize, setEstVsize] = useState(151);
   const [estFee, setEstFee] = useState(302);
   const [estNote, setEstNote] = useState("");
+  const [spendPath, setSpendPath] = useState('claim'); // 'claim' | 'refund'
 
   // Decode funding tx helper (no auto-fill)
   const [helperNet, setHelperNet] = useState('testnet');
@@ -185,17 +186,42 @@ export default function Receiver() {
       const outVal = Number(destValue) >>> 0;
       if (outVal <= 0) throw new Error('Destination value must be > 0');
       const psbt = new bitcoin.Psbt({ network: bitcoin.networks.testnet });
-      const tapLeafScript = [{
-        leafVersion: claimParsed.leaf_ver >>> 0,
-        script: Buffer.from(claimParsed.script),
-        controlBlock: Buffer.from(claimParsed.control || []),
-      }];
-      psbt.addInput({
-        hash,
-        index,
-        witnessUtxo: { script, value },
-        tapLeafScript,
-      });
+      let tapLeafScript;
+      if (spendPath === 'claim') {
+        tapLeafScript = [{
+          leafVersion: claimParsed.leaf_ver >>> 0,
+          script: Buffer.from(claimParsed.script),
+          controlBlock: Buffer.from(claimParsed.control || []),
+        }];
+        psbt.addInput({
+          hash,
+          index,
+          witnessUtxo: { script, value },
+          tapLeafScript,
+        });
+      } else {
+        // Refund path: reconstruct control block using internal_pubkey + both leaves
+        const leafVer = (claimParsed.leaf_ver >>> 0);
+        const internalPubkey = Buffer.from(claimParsed.internal_pubkey || []);
+        const scriptClaim = Buffer.from(claimParsed.script || []);
+        const scriptRefund = Buffer.from(claimParsed.refund_script || []);
+        const scriptTree = [ { output: scriptClaim }, { output: scriptRefund } ];
+        const redeem = { output: scriptRefund, redeemVersion: leafVer };
+        const p2trRedeem = bitcoin.payments.p2tr({ internalPubkey, scriptTree, redeem, network: bitcoin.networks.testnet });
+        const wit = p2trRedeem.witness || [];
+        const controlBlock = wit.length ? Buffer.from(wit[wit.length - 1]) : Buffer.alloc(0);
+        tapLeafScript = [{ leafVersion: leafVer, script: scriptRefund, controlBlock }];
+        // CLTV: set locktime to expires_at and sequence < 0xffffffff
+        const lock = Number(claimParsed.expires_at) >>> 0;
+        if (lock > 0) psbt.setLocktime(lock);
+        psbt.addInput({
+          hash,
+          index,
+          sequence: 0xfffffffe,
+          witnessUtxo: { script, value },
+          tapLeafScript,
+        });
+      }
       // Fee and optional change
       const outCount = (changeAddress || '').trim() ? 2 : 1;
       const vsize = estimateVsize(outCount);
@@ -627,7 +653,11 @@ export default function Receiver() {
       {claimParsed && (
         <section className="rounded-lg border p-4 space-y-3">
           <h2 className="font-medium">Build Claim PSBT</h2>
-          <p className="text-sm text-zinc-500">Provide the funding UTXO details and destination. This constructs a tapscript spend using the claim leaf/script and control block from the bundle.</p>
+          <p className="text-sm text-zinc-500">Provide the funding UTXO details and destination. Choose spend path: Claim (R + preimage) or Refund (after H_exp with S).</p>
+          <div className="flex items-center gap-4 text-sm">
+            <label className="inline-flex items-center gap-2"><input type="radio" name="spendpath" checked={spendPath==='claim'} onChange={()=>setSpendPath('claim')} /> Claim</label>
+            <label className="inline-flex items-center gap-2"><input type="radio" name="spendpath" checked={spendPath==='refund'} onChange={()=>setSpendPath('refund')} /> Refund</label>
+          </div>
           <div className="grid md:grid-cols-2 gap-3">
             <label className="space-y-1 md:col-span-2">
               <div className="text-sm text-zinc-500">Funding txid (hex)</div>

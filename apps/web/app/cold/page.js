@@ -33,6 +33,7 @@ export default function Cold() {
   const [rPrivNotice, setRPrivNotice] = useState('');
   const [sPrivNotice, setSPrivNotice] = useState('');
   const [savedRConfirmed, setSavedRConfirmed] = useState(false);
+  const [tipNote, setTipNote] = useState('');
 
   useEffect(() => {
     checkColdStatus();
@@ -79,6 +80,51 @@ export default function Cold() {
       await checkColdStatus();
     } catch {
       setStatus('Failed to unregister SW');
+    }
+  }
+
+  // Fetch testnet/mainnet/signet tip height with timeout and fallback endpoints
+  async function fetchTipHeight(netKey) {
+    const list = [];
+    if (netKey === 'mainnet') {
+      list.push('https://mempool.space/api/blocks/tip/height');
+      list.push('https://blockstream.info/api/blocks/tip/height');
+    } else if (netKey === 'signet') {
+      list.push('https://mempool.space/signet/api/blocks/tip/height');
+    } else {
+      list.push('https://mempool.space/testnet/api/blocks/tip/height');
+      list.push('https://blockstream.info/testnet/api/blocks/tip/height');
+    }
+    const TIMEOUT_MS = 10000;
+    const errs = [];
+    for (const url of list) {
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+      try {
+        const r = await fetch(url, { signal: ctrl.signal });
+        clearTimeout(to);
+        const t = await r.text();
+        const n = parseInt((t||'').trim(), 10);
+        if (Number.isFinite(n) && n > 0) return n;
+        errs.push(`${url}: invalid response '${t}'`);
+      } catch (e) {
+        clearTimeout(to);
+        errs.push(`${url}: ${String(e?.message || e)}`);
+      }
+    }
+    throw new Error(errs.join(' | '));
+  }
+
+  // UI handler for the Tip+2 button
+  async function handleSetExpiryNearTip() {
+    try {
+      setTipNote('Fetching tip height...');
+      const tip = await fetchTipHeight(networkKey);
+      const off = 2;
+      setExpiry(tip + off);
+      setTipNote(`Set expiry to tip(${tip}) + ${off} = ${tip + off}`);
+    } catch (e) {
+      setTipNote(`Failed to fetch tip: ${String(e?.message || e)}${status?.toLowerCase()?.includes('cold') ? ' (Cold Mode may be blocking network)' : ''}`);
     }
   }
 
@@ -222,9 +268,9 @@ export default function Cold() {
       const p2trRedeem = bitcoin.payments.p2tr({ internalPubkey, scriptTree, redeem, network });
       const witness = p2trRedeem.witness || [];
       const control = witness.length ? witness[witness.length - 1] : new Uint8Array([]);
-      // Build claim-bundle CBOR object: note control is currently a placeholder; computed during claim assembly later
+      // Build claim-bundle CBOR object
       const bundle = {
-        ver: 1,
+        ver: 2,
         h_alg: 'sha256',
         h,
         R_pub: R,
@@ -232,6 +278,9 @@ export default function Cold() {
         leaf_ver: 0xc0,
         control,
         expires_at: Number(expiry) || 0,
+        // v2 additions for refund path construction on the receiver
+        refund_script: leaves.refund,
+        internal_pubkey: internalPubkey,
       };
       const cbor = cborEncode(bundle);
       const ur = encodeUR('claim-bundle', cbor, 140);
@@ -318,7 +367,11 @@ export default function Cold() {
           </label>
           <label className="space-y-1">
             <div className="text-sm text-zinc-500">Expiry height (H_exp)</div>
-            <input type="number" className="w-full rounded border px-3 py-2" value={expiry} onChange={e=>setExpiry(Number(e.target.value)||0)} />
+            <div className="flex gap-2">
+              <input type="number" className="w-full rounded border px-3 py-2" value={expiry} onChange={e=>setExpiry(Number(e.target.value)||0)} />
+              <button type="button" onClick={handleSetExpiryNearTip} className="px-2 rounded border text-sm whitespace-nowrap">Tip+2</button>
+            </div>
+            {tipNote && <div className="text-xs text-zinc-500">{tipNote}</div>}
           </label>
           <label className="space-y-1 md:col-span-2">
             <div className="text-sm text-zinc-500">R x-only pubkey (32-byte hex)</div>

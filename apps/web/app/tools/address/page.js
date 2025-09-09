@@ -8,7 +8,7 @@ import { ECPairFactory } from "ecpair";
 export default function AddressTool() {
   useMemo(() => { try { bitcoin.initEccLib(ecc); } catch {} }, []);
 
-  const [networkKey, setNetworkKey] = useState("signet");
+  const [networkKey, setNetworkKey] = useState("testnet");
   const [privInput, setPrivInput] = useState("");
   const [err, setErr] = useState("");
   const [p2wpkh, setP2wpkh] = useState(null);
