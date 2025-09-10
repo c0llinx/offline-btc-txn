@@ -1,257 +1,307 @@
-import axios, { AxiosError } from 'axios';
+import axios, { AxiosError, AxiosRequestConfig } from 'axios';
 import * as bitcoin from 'bitcoinjs-lib';
-import { UTXO, TransactionStatus, AddressInfo, FeeEstimate, ErrorResponse } from '../shared/types.js';
+import {
+  UTXO,
+  TransactionStatus,
+  AddressInfo,
+  FeeEstimate,
+  ErrorResponse,
+} from '../shared/types.js';
+import { BitcoinNetwork, NetworkConfig } from './bitcoin/networks.js';
 
 export class MempoolAPI {
-  private readonly baseURL = 'https://mempool.space/testnet/api';
-  private readonly requestDelay = 1000; // 1 second between requests to avoid rate limiting
+  private static lastRequestAt: number = 0;
+  private readonly baseURL: string;
+  private readonly requestDelay: number = 1000;
+  static apiConfig: AxiosRequestConfig = {
+    timeout: 10000,
+    headers: {
+      'User-Agent': 'Bitcoin-Taproot-Calculator/1.0.0',
+      'Content-Type': 'application/json',
+    },
+  };
+
+  constructor(network: BitcoinNetwork) {
+    const config = NetworkConfig.create(network);
+    this.baseURL = config.apiEndpoints[1];
+  }
 
   /**
-   * Fetch UTXOs for a given address
+   * Fetches UTXOs for a given Bitcoin address and enriches them with scriptPubKey information.
+   * @param {string} address The Bitcoin address to query.
+   * @returns {Promise<UTXO[]>} A promise that resolves to an array of UTXOs.
+   * @throws {Error} Throws an error if the initial API request fails.
    */
   async getAddressUTXOs(address: string): Promise<UTXO[]> {
     try {
       await this.delay(this.requestDelay);
-      
-      const response = await axios.get(`${this.baseURL}/address/${address}/utxo`, {
-        timeout: 10000,
-        headers: {
-          'User-Agent': 'Bitcoin-Taproot-Calculator/1.0.0'
-        }
-      });
 
-      // Fetch scriptPubKey for each UTXO by getting transaction details
+      const utxoResponse = await axios.get(
+        `${this.baseURL}/address/${address}/utxo`,
+        MempoolAPI.apiConfig
+      );
+      const utxos = utxoResponse.data;
+
+      // Concurrently fetch transaction details for each UTXO to get the scriptPubKey.
       const utxosWithScripts = await Promise.all(
-        response.data.map(async (utxo: any) => {
+        utxos.map(async (utxo: any) => {
           try {
-            await this.delay(500); // Add delay between requests
-            // Fetch the transaction to get the scriptPubKey
-            const txResponse = await axios.get(`${this.baseURL}/tx/${utxo.txid}`, {
-              timeout: 15000,
-              headers: { 'User-Agent': 'Bitcoin-Taproot-Calculator/1.0.0' }
-            });
+            // Introduce a small delay between concurrent requests to mitigate rate limiting.
+            await this.delay(500);
+
+            const txResponse = await axios.get(
+              `${this.baseURL}/tx/${utxo.txid}`,
+              MempoolAPI.apiConfig
+            );
             const scriptPubKey = txResponse.data.vout[utxo.vout].scriptpubkey;
-            
+
             return {
-              txid: utxo.txid,
-              vout: utxo.vout,
-              value: utxo.value,
-              scriptPubKey: scriptPubKey,
-              confirmations: utxo.status?.confirmed ? utxo.status.block_height : 0
+              ...utxo,
+              scriptPubKey,
+              confirmations: utxo.status?.confirmed
+                ? utxo.status.block_height
+                : 0,
             };
           } catch (error) {
-            console.warn(`Failed to fetch scriptPubKey for UTXO ${utxo.txid}:${utxo.vout}, using fallback:`, error);
-            // Fallback: generate P2TR scriptPubKey for the address
+            console.warn(
+              `Failed to fetch scriptPubKey for UTXO ${utxo.txid}:${utxo.vout}. Falling back to P2TR script.`,
+              error
+            );
             const fallbackScript = this.generateP2TRScriptPubKey(address);
+
             return {
-              txid: utxo.txid,
-              vout: utxo.vout,
-              value: utxo.value,
+              ...utxo,
               scriptPubKey: fallbackScript,
-              confirmations: utxo.status?.confirmed ? utxo.status.block_height : 0
+              confirmations: utxo.status?.confirmed
+                ? utxo.status.block_height
+                : 0,
             };
           }
         })
       );
-      
+
       return utxosWithScripts;
     } catch (error) {
-      throw this.handleAPIError(error, `Failed to fetch UTXOs for address ${address}`);
+      throw this.handleAPIError(
+        error,
+        `Failed to fetch UTXOs for address: ${address}`
+      );
     }
   }
 
   /**
-   * Get detailed address information
+   * Get detailed address information including total received and spent amounts.
+   * @param {string} address The Bitcoin address to query.
+   * @returns {Promise<AddressInfo>} A promise that resolves to an object with address details.
+   * @throws {Error} Throws a detailed error if the API request fails.
    */
   async getAddressInfo(address: string): Promise<AddressInfo> {
     try {
       await this.delay(this.requestDelay);
-      
-      const response = await axios.get(`${this.baseURL}/address/${address}`, {
-        timeout: 10000,
-        headers: {
-          'User-Agent': 'Bitcoin-Taproot-Calculator/1.0.0'
-        }
-      });
-
+      const response = await axios.get(
+        `${this.baseURL}/address/${address}`,
+        MempoolAPI.apiConfig
+      );
       return response.data;
     } catch (error) {
-      throw this.handleAPIError(error, `Failed to fetch address info for ${address}`);
+      throw this.handleAPIError(
+        error,
+        `Failed to fetch address info for ${address}`
+      );
     }
   }
 
   /**
-   * Get transaction status and details
+   * Get transaction status and details.
+   * @param {string} txid The transaction ID to query.
+   * @returns {Promise<TransactionStatus>} A promise that resolves to an object with transaction details and confirmation status.
+   * @throws {Error} Throws a detailed error if the API request fails.
    */
   async getTransactionStatus(txid: string): Promise<TransactionStatus> {
     try {
       await this.delay(this.requestDelay);
-      
-      const response = await axios.get(`${this.baseURL}/tx/${txid}`, {
-        timeout: 10000,
-        headers: {
-          'User-Agent': 'Bitcoin-Taproot-Calculator/1.0.0'
-        }
-      });
-
+      const response = await axios.get(
+        `${this.baseURL}/tx/${txid}`,
+        MempoolAPI.apiConfig
+      );
       return response.data;
     } catch (error) {
-      throw this.handleAPIError(error, `Failed to fetch transaction status for ${txid}`);
+      throw this.handleAPIError(
+        error,
+        `Failed to fetch transaction status for ${txid}`
+      );
     }
   }
 
   /**
-   * Get raw transaction hex
+   * Get raw transaction hex.
+   * @param {string} txid The transaction ID to query.
+   * @returns {Promise<string>} A promise that resolves to the raw transaction hex string.
+   * @throws {Error} Throws a detailed error if the API request fails.
    */
   async getRawTransaction(txid: string): Promise<string> {
     try {
       await this.delay(this.requestDelay);
-      
-      const response = await axios.get(`${this.baseURL}/tx/${txid}/hex`, {
-        timeout: 10000,
-        headers: {
-          'User-Agent': 'Bitcoin-Taproot-Calculator/1.0.0'
-        }
-      });
-
+      const response = await axios.get(
+        `${this.baseURL}/tx/${txid}/hex`,
+        MempoolAPI.apiConfig
+      );
       return response.data;
     } catch (error) {
-      throw this.handleAPIError(error, `Failed to fetch raw transaction for ${txid}`);
+      throw this.handleAPIError(
+        error,
+        `Failed to fetch raw transaction for ${txid}`
+      );
     }
   }
 
   /**
-   * Broadcast transaction to the network
+   * Broadcast a signed raw transaction to the network.
+   * @param {string} rawTx The raw transaction hex string to broadcast.
+   * @returns {Promise<string>} A promise that resolves to the transaction ID (txid) of the broadcasted transaction.
+   * @throws {Error} Throws a detailed error if the broadcast fails.
    */
   async broadcastTransaction(rawTx: string): Promise<string> {
     try {
       await this.delay(this.requestDelay);
-      
       const response = await axios.post(`${this.baseURL}/tx`, rawTx, {
+        ...MempoolAPI.apiConfig,
         headers: {
           'Content-Type': 'text/plain',
-          'User-Agent': 'Bitcoin-Taproot-Calculator/1.0.0'
+          'User-Agent': MempoolAPI.apiConfig.headers['User-Agent'],
         },
-        timeout: 15000
+        timeout: 15000,
       });
-
-      return response.data; // Returns the txid
+      return response.data;
     } catch (error) {
       throw this.handleAPIError(error, 'Failed to broadcast transaction');
     }
   }
 
   /**
-   * Get current fee estimates
+   * Get current fee estimates.
+   * @returns {Promise<FeeEstimate>} A promise that resolves to an object with recommended fees in satoshis/vB. Returns default values on failure.
    */
   async getFeeEstimates(): Promise<FeeEstimate> {
     try {
       await this.delay(this.requestDelay);
-      
-      const response = await axios.get(`${this.baseURL}/v1/fees/recommended`, {
-        timeout: 10000,
-        headers: {
-          'User-Agent': 'Bitcoin-Taproot-Calculator/1.0.0'
-        }
-      });
-
+      const response = await axios.get(
+        `${this.baseURL}/v1/fees/recommended`,
+        MempoolAPI.apiConfig
+      );
       return response.data;
     } catch (error) {
-      // Return default fees if API fails
       console.warn('Failed to fetch fee estimates, using defaults:', error);
       return {
         fastestFee: 20,
         halfHourFee: 15,
         hourFee: 10,
         economyFee: 5,
-        minimumFee: 1
+        minimumFee: 1,
       };
     }
   }
 
   /**
-   * Check if address has sufficient balance
+   * Check if an address has a sufficient confirmed or unconfirmed balance to meet a required amount.
+   * @param {string} address The Bitcoin address to check.
+   * @param {number} requiredAmount The minimum balance in satoshis required.
+   * @returns {Promise<{ hasBalance: boolean; availableBalance: number; confirmedBalance: number; unconfirmedBalance: number; }>} An object containing balance information.
+   * @throws {Error} Throws a detailed error if the balance check fails.
    */
-  async checkAddressBalance(address: string, requiredAmount: number): Promise<{
+  async checkAddressBalance(
+    address: string,
+    requiredAmount: number
+  ): Promise<{
     hasBalance: boolean;
     availableBalance: number;
     confirmedBalance: number;
     unconfirmedBalance: number;
   }> {
     try {
-      const addressInfo = await this.getAddressInfo(address);
-      const utxos = await this.getAddressUTXOs(address);
+      // Concurrently fetch address info and UTXOs for efficiency.
+      const [addressInfo, utxos] = await Promise.all([
+        this.getAddressInfo(address),
+        this.getAddressUTXOs(address),
+      ]);
 
-      const confirmed = utxos
-        .filter(utxo => utxo.confirmations !== undefined && utxo.confirmations > 0);
+      const confirmed = utxos.filter((utxo) => utxo.confirmations > 0);
+      const unconfirmed = utxos.filter((utxo) => utxo.confirmations === 0);
 
-      const unconfirmed = utxos
-        .filter(utxo => utxo.confirmations === undefined || utxo.confirmations === 0);
-
-      const availableBalance = confirmed.reduce((sum, utxo) => sum + utxo.value, 0) + unconfirmed.reduce((sum, utxo) => sum + utxo.value, 0);
+      const availableBalance =
+        confirmed.reduce((sum, utxo) => sum + utxo.value, 0) +
+        unconfirmed.reduce((sum, utxo) => sum + utxo.value, 0);
 
       return {
         hasBalance: availableBalance >= requiredAmount,
         availableBalance,
         confirmedBalance: confirmed.reduce((sum, utxo) => sum + utxo.value, 0),
-        unconfirmedBalance: unconfirmed.reduce((sum, utxo) => sum + utxo.value, 0)
+        unconfirmedBalance: unconfirmed.reduce(
+          (sum, utxo) => sum + utxo.value,
+          0
+        ),
       };
     } catch (error) {
-      throw this.handleAPIError(error, `Failed to check balance for address ${address}`);
+      throw this.handleAPIError(
+        error,
+        `Failed to check balance for address ${address}`
+      );
     }
   }
 
   /**
-   * Wait for transaction confirmation
+   * Polls the API to wait for a transaction to be confirmed on the blockchain.
+   * @param {string} txid The transaction ID to monitor.
+   * @param {number} maxAttempts The maximum number of times to check for confirmation. Defaults to 60.
+   * @param {number} intervalMs The time in milliseconds to wait between each attempt. Defaults to 30000ms (30s).
+   * @returns {Promise<TransactionStatus>} A promise that resolves with the confirmed transaction status.
+   * @throws {Error} Throws an error if the transaction is not confirmed after `maxAttempts`.
    */
   async waitForConfirmation(
-    txid: string, 
-    maxAttempts: number = 60, 
+    txid: string,
+    maxAttempts: number = 60,
     intervalMs: number = 30000
   ): Promise<TransactionStatus> {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
         const status = await this.getTransactionStatus(txid);
-        
         if (status.status.confirmed) {
           return status;
         }
-
-        console.log(`Attempt ${attempt + 1}/${maxAttempts}: Transaction ${txid} not yet confirmed`);
-        
-        if (attempt < maxAttempts - 1) {
-          await this.delay(intervalMs);
-        }
+        console.log(
+          `Attempt ${attempt + 1}/${maxAttempts}: Transaction ${txid} not yet confirmed.`
+        );
       } catch (error) {
-        console.warn(`Attempt ${attempt + 1} failed:`, error);
-        
-        if (attempt === maxAttempts - 1) {
-          throw error;
-        }
-        
-        await this.delay(intervalMs);
+        console.warn(`Attempt ${attempt + 1} failed for txid ${txid}:`, error);
       }
+      await this.delay(intervalMs);
     }
-
-    throw new Error(`Transaction ${txid} not confirmed after ${maxAttempts} attempts`);
+    throw new Error(
+      `Transaction ${txid} not confirmed after ${maxAttempts} attempts.`
+    );
   }
 
   /**
-   * Get mempool.space URL for a transaction
+   * Get the mempool.space URL for a given transaction.
+   * @param {string} txid The transaction ID.
+   * @returns {string} The full URL to the transaction on mempool.space.
    */
   getMempoolURL(txid: string): string {
-    return `https://mempool.space/testnet/tx/${txid}`;
+    return `${this.baseURL.replace('/api', '')}/tx/${txid}`;
   }
 
   /**
-   * Get mempool.space URL for an address
+   * Get the mempool.space URL for a given address.
+   * @param {string} address The Bitcoin address.
+   * @returns {string} The full URL to the address on mempool.space.
    */
   getAddressURL(address: string): string {
-    return `https://mempool.space/testnet/address/${address}`;
+    return `${this.baseURL.replace('/api', '')}/address/${address}`;
   }
 
   /**
-   * Check network health and connectivity
+   * Check the health and connectivity of the network API.
+   * @returns {Promise<{ isHealthy: boolean; blockHeight: number; difficulty: number; mempoolSize: number; }>} A promise that resolves to an object with network health stats. Returns a default "unhealthy" state on failure.
    */
   async checkNetworkHealth(): Promise<{
     isHealthy: boolean;
@@ -261,100 +311,86 @@ export class MempoolAPI {
   }> {
     try {
       const [blockTip, mempoolStats] = await Promise.all([
-        axios.get(`${this.baseURL}/blocks/tip/height`),
-        axios.get(`${this.baseURL}/mempool`)
+        axios.get(`${this.baseURL}/blocks/tip/height`, MempoolAPI.apiConfig),
+        axios.get(`${this.baseURL}/mempool`, MempoolAPI.apiConfig),
       ]);
 
       return {
         isHealthy: true,
         blockHeight: blockTip.data,
-        difficulty: 0, // Not readily available from mempool.space
-        mempoolSize: mempoolStats.data.count
+        difficulty: 0,
+        mempoolSize: mempoolStats.data.count,
       };
     } catch (error) {
+      console.error('Network health check failed:', error);
       return {
         isHealthy: false,
         blockHeight: 0,
         difficulty: 0,
-        mempoolSize: 0
+        mempoolSize: 0,
       };
     }
   }
 
   /**
-   * Validate Bitcoin testnet address format
+   * Validates a Bitcoin testnet address format based on common patterns (P2PKH, P2SH, P2WPKH, P2TR).
+   * @param {string} address The address string to validate.
+   * @returns {boolean} True if the address has a valid format, false otherwise.
    */
   validateTestnetAddress(address: string): boolean {
-    // Basic validation for testnet addresses
-    if (address.startsWith('tb1p') && address.length === 62) {
-      // Testnet Taproot (P2TR)
-      return true;
-    }
-    if (address.startsWith('tb1q') && address.length === 42) {
-      // Testnet Segwit v0 (P2WPKH/P2WSH)
-      return true;
-    }
-    if (address.startsWith('2') && (address.length >= 34 && address.length <= 35)) {
-      // Testnet P2SH
-      return true;
-    }
-    if ((address.startsWith('m') || address.startsWith('n')) && (address.length >= 34 && address.length <= 35)) {
-      // Testnet P2PKH
-      return true;
-    }
-    
-    return false;
+    const isP2TR = address.startsWith('tb1p') && address.length === 62;
+    const isP2W = address.startsWith('tb1q') && address.length === 42;
+    const isP2SH =
+      address.startsWith('2') && address.length >= 34 && address.length <= 35;
+    const isP2PKH =
+      (address.startsWith('m') || address.startsWith('n')) &&
+      address.length >= 34 &&
+      address.length <= 35;
+
+    return isP2TR || isP2W || isP2SH || isP2PKH;
   }
 
-  // Private helper methods
   private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  /**
-   * Generate P2TR scriptPubKey from bech32m address as fallback
-   */
   private generateP2TRScriptPubKey(address: string): string {
-    // For P2TR (tb1p...), extract the witness program and create scriptPubKey
     if (address.startsWith('tb1p') && address.length === 62) {
-      // P2TR scriptPubKey: OP_1 <32-byte-witness-program>
       try {
         const decoded = bitcoin.address.fromBech32(address);
         const witnessProgram = decoded.data.toString('hex');
-        return `5120${witnessProgram}`; // OP_1 (0x51) + PUSH_32 (0x20) + witness program
-      } catch {
-        // Fallback to empty script if decode fails
-        return '51200000000000000000000000000000000000000000000000000000000000000000';
+        return `5120${witnessProgram}`;
+      } catch (e) {
+        console.error('Failed to decode P2TR address:', e);
+        return '';
       }
     }
-    // For other address types, return empty script
     return '';
   }
 
   private handleAPIError(error: unknown, message: string): Error {
     if (axios.isAxiosError(error)) {
       const axiosError = error as AxiosError;
-      
       if (axiosError.response) {
-        // Server responded with error status
         const status = axiosError.response.status;
         const data = axiosError.response.data;
-        
         if (status === 404) {
           return new Error(`${message}: Not found (404)`);
         } else if (status === 429) {
-          return new Error(`${message}: Rate limited (429). Please wait and try again.`);
+          return new Error(
+            `${message}: Rate limited (429). Please wait and try again.`
+          );
         } else if (status >= 500) {
-          return new Error(`${message}: Server error (${status})`);
-        } else {
-          return new Error(`${message}: API error (${status}) - ${data}`);
+          return new Error(`${message}: Server error (${status}) - ${data}`);
         }
+        return new Error(`${message}: API error (${status}) - ${data}`);
       } else if (axiosError.request) {
-        // Network error
         return new Error(`${message}: Network error - ${axiosError.message}`);
       }
     }
-
-    return new Error(`${message}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    return new Error(
+      `${message}: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
   }
 }
+
