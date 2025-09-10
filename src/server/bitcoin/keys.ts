@@ -55,6 +55,6 @@ export class HDWallet {
       this.generateMasterExtendedPublicKey()
     );
     let childKey = masterPubKey.derivePath(derivationPath);
-    return childKey.publicKey.subarray(1, 33);
+    return childKey.privateKey;
   }
 }

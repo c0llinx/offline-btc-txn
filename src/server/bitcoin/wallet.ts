@@ -218,6 +218,9 @@ export class OfflineBitcoinWallet {
       addressInfo.change,
       addressInfo.index
     );
-    return ECPair.fromPublicKey(Buffer.from(key));
+    if (key == undefined) {
+      throw new Error('Failed to derive private key for signing');
+    }
+    return ECPair.fromPrivateKey(Buffer.from(key));
   }
 }
