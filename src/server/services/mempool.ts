@@ -6,8 +6,8 @@ import {
   AddressInfo,
   FeeEstimate,
   ErrorResponse,
-} from '../shared/types.js';
-import { BitcoinNetwork, NetworkConfig } from './bitcoin/networks.js';
+} from '../../shared/types.js';
+import { BitcoinNetwork, NetworkConfig } from '../bitcoin/networks';
 
 export class MempoolAPI {
   private static lastRequestAt: number = 0;

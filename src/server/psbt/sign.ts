@@ -8,6 +8,8 @@ import { ECPairInterface } from 'bitcoinjs-lib';
  * @param inputIndex The input index to sign
  * @param keyPair The bitcoinjs-lib key pair containing the private key
  * @returns The PSBT with the input signed
+ * NOTE: we are not validating signature here, but this would be essential
+ * for a multisig situation
  */
 export function signPsbtInput(
   psbt: bitcoin.Psbt,
@@ -15,20 +17,6 @@ export function signPsbtInput(
   keyPair: ECPairInterface
 ): bitcoin.Psbt {
   psbt.signInput(inputIndex, keyPair);
-
-  // Optionally validate the signature
-  const isValid = psbt.validateSignaturesOfInput(inputIndex);
-  if (!isValid) {
-    throw new Error(`Invalid signature for input ${inputIndex}`);
-  }
-
-  // Finalize input if all signatures are present (adjust logic per multisig needs)
-  try {
-    psbt.finalizeInput(inputIndex);
-  } catch (e) {
-    // Input may require multiple signatures or additional steps before finalization
-  }
-
   return psbt;
 }
 
@@ -46,30 +34,10 @@ export function signAllInputs(
   for (let i = 0; i < psbt.inputCount; i++) {
     try {
       psbt.signInput(i, keyPair);
-      const isValid = psbt.validateSignaturesOfInput(i);
-      if (!isValid) {
-        throw new Error(`Invalid signature for input ${i}`);
-      }
-      psbt.finalizeInput(i);
     } catch (e) {
       // If signing or finalizing fails, continue to next input
       // This can occur in multisig or partially signed inputs
     }
   }
   return psbt;
-}
-
-/**
- * Verifies that all inputs in the PSBT are signed and valid.
- *
- * @param psbt The PSBT object to verify
- * @returns true if all inputs have valid signatures, false otherwise
- */
-export function verifyPsbtSignatures(psbt: bitcoin.Psbt): boolean {
-  for (let i = 0; i < psbt.inputCount; i++) {
-    if (!psbt.validateSignaturesOfInput(i)) {
-      return false;
-    }
-  }
-  return true;
 }

@@ -3,6 +3,8 @@ import { Balance, UTXO } from './utxo';
 import { HDWallet } from './keys';
 import { TaprootAddressGenerator } from '../taproot/address';
 import { generateMnemonic, validateMnemonic } from 'bip39';
+import ECPairFactory, { ECPairInterface } from 'ecpair';
+import * as ecc from 'tiny-secp256k1';
 
 /** AddressInfo contains information about a bitcoin address
  * within a HD wallet.
@@ -202,5 +204,20 @@ export class OfflineBitcoinWallet {
       utxos: this.utxos,
     };
     return JSON.stringify(data, null, 2);
+  }
+
+  public getSigningKeyForAddress(address: string): ECPairInterface {
+    let addressInfo = this.usedAddresses[address];
+    if (addressInfo == undefined) {
+      throw new Error('No Address found in wallet.');
+    }
+
+    let ECPair = ECPairFactory(ecc);
+    let key = this.hdWallet.getKeyFromPath(
+      addressInfo.account,
+      addressInfo.change,
+      addressInfo.index
+    );
+    return ECPair.fromPublicKey(Buffer.from(key));
   }
 }

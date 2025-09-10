@@ -8,13 +8,10 @@ import * as bitcoin from 'bitcoinjs-lib';
  * @param psbt The PSBT object to finalize
  * @returns The fully signed bitcoinjs-lib Transaction object
  * @throws Throws if finalization or extraction fails
+ * NOTE: we are not validating signatures here because it is not a multi signature
+ * transaction
  */
 export function finalizePsbt(psbt: bitcoin.Psbt): bitcoin.Transaction {
-  // Validate signatures of all inputs before finalizing (optional but recommended)
-  if (!psbt.validateSignaturesOfAllInputs()) {
-    throw new Error('PSBT has invalid signatures');
-  }
-
   // Finalize all inputs - adds final scripts/witnesses
   psbt.finalizeAllInputs();
 

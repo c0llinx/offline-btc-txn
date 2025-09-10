@@ -19,22 +19,16 @@ const DUST_THRESHOLD = 546; // in satoshis
  * Options for creating a Partially Signed Bitcoin Transaction (PSBT).
  */
 export interface PsbtCreateOptions {
-  /** The Bitcoin network (e.g., Mainnet, Testnet) on which the transaction will occur. */
   network: BitcoinNetwork;
-  /** The amount to be sent to the recipient, in satoshis. */
   sendAmount: Satoshi;
-  /** The recipient's Bitcoin address. Required for both sender and receiver-created PSBTs. */
   recipientAddress: string;
-  /** An array of Unspent Transaction Outputs (UTXOs) available for spending. Required for `createSenderPsbt`. */
   utxos?: UTXO[];
-  /** The sender's address to receive any change from the transaction. Required for `createSenderPsbt`. */
   changeAddress?: string;
-  /** The desired fee rate for the transaction, in satoshis per virtual byte (sats/vB). */
   feeRate?: number;
 }
 
 /**
- * Creates a PSBT from the **sender's perspective**.
+ * Creates a PSBT from the sender's perspective.
  *
  * This function selects UTXOs to cover the send amount and fee, adds them as inputs,
  * and defines the recipient and change outputs. The resulting PSBT is ready for the sender to sign.
@@ -72,7 +66,6 @@ export function createSenderPsbt({
     // Estimate fee with the current set of inputs and 2 outputs (recipient + change)
     const estimatedFee = estimateFee(selectedUtxos.length, 2, feeRate);
 
-    // If we have enough to cover the payment and the fee, we're done selecting.
     if (totalInputValue >= sendAmount + estimatedFee) {
       break;
     }
@@ -116,7 +109,7 @@ export function createSenderPsbt({
 }
 
 /**
- * Creates a PSBT from the **receiver's perspective** (a "payment request").
+ * Creates a PSBT from the receiver's perspective (a "payment request").
  *
  * This function creates a PSBT with only an output defined: the recipient's address
  * and the amount they wish to receive. The sender will then add their inputs and
@@ -140,6 +133,90 @@ export function createReceiverPsbt({
   });
 
   // Inputs and change are left for the sender to add.
+  return psbt;
+}
+
+/**
+ * Adds the sender's inputs and change output to a PSBT created by the receiver.
+ *
+ * This function takes a partially completed PSBT (with only a recipient output)
+ * and completes it by selecting UTXOs from the sender, adding them as inputs,
+ * and creating a change output. The resulting PSBT is ready for the sender to sign.
+ *
+ * @param psbt - The partially signed Bitcoin transaction created by the receiver.
+ * @param utxos - An array of the sender's unspent transaction outputs.
+ * @param changeAddress - The sender's address for the change output.
+ * @param feeRate - The desired fee rate in satoshis per virtual byte.
+ * @returns A `bitcoin.Psbt` object with inputs and outputs defined.
+ * @throws If `utxos`, `changeAddress`, or `feeRate` are not provided.
+ * @throws If the available UTXOs are insufficient to cover the send amount and transaction fee.
+ */
+export function addSenderDetailsToPsbt(
+  psbt: bitcoin.Psbt,
+  utxos: UTXO[],
+  changeAddress: string,
+  feeRate: number
+): bitcoin.Psbt {
+  if (!utxos || !changeAddress || feeRate === undefined) {
+    throw new Error(
+      'UTXOs, changeAddress, and feeRate are required to finalize a receiver-created PSBT.'
+    );
+  }
+
+  // Get the recipient's output and required amount from the existing PSBT
+  const recipientOutput = psbt.data.outputs[0];
+  if (!recipientOutput) {
+    throw new Error('Invalid PSBT: Recipient output not found.');
+  }
+
+  const sendAmount = recipientOutput.unknownKeyVals['value'] as number;
+
+  let totalInputValue = 0;
+  const selectedUtxos: UTXO[] = [];
+  const outputsCount = 2; // Recipient + Change
+
+  // Find enough UTXOs to cover the send amount + estimated fee
+  for (const utxo of utxos) {
+    selectedUtxos.push(utxo);
+    totalInputValue += utxo.amount;
+
+    const estimatedFee = estimateFee(
+      selectedUtxos.length,
+      outputsCount,
+      feeRate
+    );
+
+    if (totalInputValue >= sendAmount + estimatedFee) {
+      break;
+    }
+  }
+
+  const finalFee = estimateFee(selectedUtxos.length, outputsCount, feeRate);
+  if (totalInputValue < sendAmount + finalFee) {
+    throw new Error(
+      `Insufficient funds. Available: ${totalInputValue} sats, Required: ${sendAmount + finalFee} sats (amount + fee).`
+    );
+  }
+
+  for (const utxo of selectedUtxos) {
+    psbt.addInput({
+      hash: utxo.txid,
+      index: utxo.vout,
+      witnessUtxo: {
+        script: Buffer.from(utxo.scriptPubKey, 'hex'),
+        value: utxo.amount,
+      },
+    });
+  }
+
+  const changeAmount = totalInputValue - sendAmount - finalFee;
+  if (changeAmount >= DUST_THRESHOLD) {
+    psbt.addOutput({
+      address: changeAddress,
+      value: changeAmount,
+    });
+  }
+
   return psbt;
 }
 

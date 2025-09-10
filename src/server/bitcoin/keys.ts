@@ -47,4 +47,14 @@ export class HDWallet {
     const coinType = this.network === BitcoinNetwork.Mainnet ? 0 : 1;
     return `m/86'/${coinType}'/${account}'/${change}/${index}`;
   }
+
+  getKeyFromPath(account: number, change: number, index: number) {
+    let bip32Factory = BIP32Factory(ecc);
+    const derivationPath = this.getDerivationPath(account, change, index);
+    const masterPubKey = bip32Factory.fromBase58(
+      this.generateMasterExtendedPublicKey()
+    );
+    let childKey = masterPubKey.derivePath(derivationPath);
+    return childKey.publicKey.subarray(1, 33);
+  }
 }
