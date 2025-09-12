@@ -2,6 +2,12 @@
 
 A complete Bitcoin Taproot calculator that creates **actual Bitcoin testnet transactions** with Tapscript arithmetic operations. This application generates real Bitcoin addresses, builds transactions with embedded calculations, and broadcasts them to the Bitcoin testnet network.
 
+## Offline Wallet (Buyer/Merchant) Guide
+
+This repository also contains a Next.js-based offline Taproot wallet with Buyer/Merchant flows (claim/refund paths) and an air‑gapped signing workflow.
+
+- Read the guide: [docs/Buyer-Merchant-Offline-Workflow.md](docs/Buyer-Merchant-Offline-Workflow.md)
+
 ## 🚀 Features
 
 - **Real Bitcoin Transactions**: Creates actual Bitcoin testnet transactions viewable on mempool.space
