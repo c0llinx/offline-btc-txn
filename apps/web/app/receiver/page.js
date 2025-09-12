@@ -551,7 +551,11 @@ export default function Receiver() {
     <main className="space-y-6">
       <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-600 text-white">RECEIVER</div>
       <h1 className="text-2xl font-semibold">Receiver</h1>
-      <p className="text-zinc-500">Import Claim Bundle (UR), wait for funding confirmation, build claim tx, and broadcast.</p>
+      <div className="text-sm space-x-3">
+        <a className="text-blue-600 underline" href="/docs/buyer-merchant#merchant-claim">Help (Claim)</a>
+        <a className="text-blue-600 underline" href="/docs/buyer-merchant#buyer-refund">Help (Refund)</a>
+      </div>
+      <p className="text-zinc-500">Import Claim Bundle (UR), wait for funding confirmation, build claim/refund PSBT, and broadcast.</p>
 
       <section className="rounded-lg border p-4 space-y-3">
         <div className="flex items-center justify-between">

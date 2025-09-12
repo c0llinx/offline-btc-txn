@@ -197,6 +197,7 @@ export default function Signer() {
     <main className="space-y-6">
       <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-600 text-white">SIGNER</div>
       <h1 className="text-2xl font-semibold">Claim / Refund Finalization (Offline Signer)</h1>
+      <div className="text-sm"><a className="text-blue-600 underline" href="/docs/buyer-merchant#signer">Help</a></div>
       <p className="text-zinc-500">Import the PSBT, then sign with the appropriate key: R for claim, S for refund. Preimage x is only needed for the claim path.</p>
 
       <section className="rounded-lg border p-4 space-y-3">

@@ -12,6 +12,7 @@ export default function Home() {
         <Link className="rounded-2xl p-6 border hover:shadow-md" href="/receiver">Receiver</Link>
         <Link className="rounded-2xl p-6 border hover:shadow-md" href="/signer">Signer</Link>
         <Link className="rounded-2xl p-6 border hover:shadow-md" href="/tools/address">Address Tool</Link>
+        <Link className="rounded-2xl p-6 border hover:shadow-md" href="/docs/buyer-merchant">Help</Link>
       </div>
     </main>
   );

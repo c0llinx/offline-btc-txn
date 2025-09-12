@@ -307,6 +307,7 @@ export default function Cold() {
     <main className="space-y-6">
       <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-600 text-white">COLD</div>
       <h1 className="text-2xl font-semibold">Cold Mode (Offline Signer)</h1>
+      <div className="text-sm"><a className="text-blue-600 underline" href="/docs/buyer-merchant#merchant-setup">Help</a></div>
       <p className="text-zinc-500">This mode enforces zero network access via a Service Worker.</p>
       <div className="rounded-xl border p-4">
         <div className="flex flex-col gap-2">
