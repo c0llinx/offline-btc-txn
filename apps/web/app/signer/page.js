@@ -11,6 +11,21 @@ import { decodeUR } from "@offline/core";
 export default function Signer() {
   const searchParams = useSearchParams();
 
+  const [networkKey, setNetworkKey] = useState("signet");
+  const [psbtInput, setPsbtInput] = useState("");
+  const [importErr, setImportErr] = useState("");
+  const [psbtInfo, setPsbtInfo] = useState(null);
+  const [psbtBuf, setPsbtBuf] = useState(null);
+  const [inputIndex, setInputIndex] = useState(0);
+  const [preimageInput, setPreimageInput] = useState("");
+  const [rPrivInput, setRPrivInput] = useState("");
+  const [signErr, setSignErr] = useState("");
+  const [signedHex, setSignedHex] = useState("");
+
+  const network = useMemo(() => {
+    if (networkKey === "mainnet") return bitcoin.networks.bitcoin;
+    return bitcoin.networks.testnet; // use testnet params for signet & testnet
+  }, [networkKey]);
 
   const handleImportPsbt = useCallback(async () => {
     setImportErr("");
@@ -35,6 +50,10 @@ export default function Signer() {
         }
       }
       const psbt = bitcoin.Psbt.fromBuffer(buf, { network });
+      if (!psbt.data.inputs[0].tapLeafScript) {
+        setImportErr("PSBT is missing tapLeafScript");
+      }
+      console.log(JSON.stringify(psbt.data.inputs, null, 2));
       setPsbtBuf(buf);
       setPsbtInfo({ inputs: psbt.inputCount, outputs: psbt.txOutputs?.length || psbt.data.globalMap.unsignedTx.tx.outs?.length || 0 });
     } catch (e) {
@@ -49,6 +68,8 @@ export default function Signer() {
       handleImportPsbt();
     }
   }, [searchParams, handleImportPsbt]);
+
+
 
   function toU8(x) {
     if (x instanceof Uint8Array) return x;
@@ -224,7 +245,7 @@ export default function Signer() {
           <div className="text-sm space-y-1">
             <div className="text-zinc-500">Signed transaction (hex)</div>
             <textarea className="w-full rounded border px-3 py-2 font-mono min-h-[100px]" readOnly value={signedHex} />
-            <div className="text-xs text-zinc-500">Broadcast this on signet/testnet using your broadcaster. On this project, use the Watch page’s broadcast or your node.</div>
+            <div className="text-xs text-zinc-500">Broadcast this on signet/testnet using your broadcaster. On this project, use the Watch page's broadcast or your node.</div>
           </div>
         )}
       </section>
