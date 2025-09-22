@@ -3,7 +3,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import cors from 'cors';
 import { TaprootCalculatorService } from './calculator.js';
-import { OfflineWorkflowService } from './workflow.ts';
+import { OfflineWorkflowService } from './workflow.js';
+import { UTXOService } from '../../packages/server-api/src/services/UTXOService.js';
 import { RealBitcoinCalculator } from './bitcoin.js';
 import { CalculationRequest } from '../shared/types.js';
 
@@ -21,6 +22,7 @@ app.use(express.static(clientBuildPath));
 // Initialize services
 const calculatorService = new TaprootCalculatorService();
 const workflowService = new OfflineWorkflowService();
+const utxoService = new UTXOService('testnet');
 
 // Serve UI root
 app.get('/', (_req, res) => {
@@ -322,6 +324,18 @@ app.post('/api/create-sender-refund-transaction', async (req, res) => {
     res.json(result);
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to create refund transaction' });
+  }
+});
+
+app.get('/api/utxos/:address/:amount', async (req, res) => {
+  try {
+    const { address, amount } = req.params;
+    const result = await utxoService.getUTXOsForAmount(address, parseInt(amount));
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({
+      error: error instanceof Error ? error.message : 'Failed to get UTXOs'
+    });
   }
 });
 

@@ -1,5 +1,5 @@
 import { RealBitcoinCalculator } from './bitcoin.js';
-import { MempoolAPI } from './mempool.js';
+import { MempoolService } from '../../packages/server-api/src/services/mempool.js';
 import { 
   CalculationRequest, 
   CalculationResult, 
@@ -25,13 +25,13 @@ interface SavedAddress {
 
 export class TaprootCalculatorService {
   private bitcoinCalculator: RealBitcoinCalculator;
-  private mempoolAPI: MempoolAPI;
+  private mempoolService: MempoolService;
   private savedAddresses: Map<string, SavedAddress> = new Map();
   private readonly addressesFilePath: string;
 
   constructor() {
     this.bitcoinCalculator = new RealBitcoinCalculator();
-    this.mempoolAPI = new MempoolAPI();
+    this.mempoolService = new MempoolService('testnet');
     
     // Set up JSON file path for persistence
     this.addressesFilePath = path.join(process.cwd(), 'saved-addresses.json');
@@ -196,13 +196,13 @@ export class TaprootCalculatorService {
     message: string;
   }> {
     try {
-      if (!this.mempoolAPI.validateTestnetAddress(address)) {
+      if (!this.mempoolService.validateTestnetAddress(address)) {
         throw new Error('Invalid testnet address format');
       }
 
       const [balanceInfo, utxos] = await Promise.all([
-        this.mempoolAPI.checkAddressBalance(address, requiredAmount),
-        this.mempoolAPI.getAddressUTXOs(address)
+        this.mempoolService.checkAddressBalance(address, requiredAmount),
+        this.mempoolService.getAddressUTXOs(address)
       ]);
 
       let message = '';
@@ -317,7 +317,7 @@ export class TaprootCalculatorService {
     mempoolUrl: string;
   }> {
     try {
-      const txStatus = await this.mempoolAPI.getTransactionStatus(txid);
+      const txStatus = await this.mempoolService.getTransactionStatus(txid);
       
       return {
         txid,
@@ -327,7 +327,7 @@ export class TaprootCalculatorService {
         blockHash: txStatus.status.block_hash,
         blockTime: txStatus.status.block_time,
         fee: txStatus.fee,
-        mempoolUrl: this.mempoolAPI.getMempoolURL(txid)
+        mempoolUrl: this.mempoolService.getMempoolURL(txid)
       };
     } catch (error) {
       return {
@@ -335,7 +335,7 @@ export class TaprootCalculatorService {
         status: 'not_found',
         confirmations: 0,
         fee: 0,
-        mempoolUrl: this.mempoolAPI.getMempoolURL(txid)
+        mempoolUrl: this.mempoolService.getMempoolURL(txid)
       };
     }
   }
@@ -351,8 +351,8 @@ export class TaprootCalculatorService {
   }> {
     try {
       const [networkHealth, feeEstimates] = await Promise.all([
-        this.mempoolAPI.checkNetworkHealth(),
-        this.mempoolAPI.getFeeEstimates()
+        this.mempoolService.checkNetworkHealth(),
+        this.mempoolService.getFeeEstimates()
       ]);
 
       return {
@@ -428,7 +428,7 @@ export class TaprootCalculatorService {
 4. Wait for 1-3 confirmations (10-30 minutes)
 5. Return here to perform the calculation
 
-🔗 Monitor your address: ${this.mempoolAPI.getAddressURL(address)}
+🔗 Monitor your address: ${this.mempoolService.getAddressURL(address)}
 
 ⚠️ IMPORTANT: This is testnet Bitcoin (no real value). Only for testing purposes.
 `.trim();
@@ -482,7 +482,7 @@ export class TaprootCalculatorService {
       }
 
       // Get current fee rates
-      const feeEstimates = await this.mempoolAPI.getFeeEstimates();
+      const feeEstimates = await this.mempoolService.getFeeEstimates();
       const feeRate = feeEstimates.fastestFee;
 
       // Create the calculation transaction
@@ -503,12 +503,12 @@ export class TaprootCalculatorService {
 
       // Broadcast the transaction
       try {
-        const broadcastedTxid = await this.mempoolAPI.broadcastTransaction(result.rawTx);
+        const broadcastedTxid = await this.mempoolService.broadcastTransaction(result.rawTx);
         result.txid = broadcastedTxid;
         result.broadcastStatus = 'success';
         
         console.log(`✅ Transaction successfully broadcasted: ${broadcastedTxid}`);
-        console.log(`🔗 View at: ${this.mempoolAPI.getMempoolURL(broadcastedTxid)}`);
+        console.log(`🔗 View at: ${this.mempoolService.getMempoolURL(broadcastedTxid)}`);
         
         // Update saved address balance
         existing.balance = Math.max(0, existing.balance - result.fee);
@@ -562,7 +562,7 @@ export class TaprootCalculatorService {
   }> {
     try {
       // Validate the address format
-      if (!this.mempoolAPI.validateTestnetAddress(address)) {
+      if (!this.mempoolService.validateTestnetAddress(address)) {
         throw new Error('Invalid testnet address format');
       }
 

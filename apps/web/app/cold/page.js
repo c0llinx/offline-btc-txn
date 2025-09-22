@@ -33,6 +33,7 @@ export default function Cold() {
   const [rPrivNotice, setRPrivNotice] = useState('');
   const [sPrivNotice, setSPrivNotice] = useState('');
   const [savedRConfirmed, setSavedRConfirmed] = useState(false);
+  const [utxoAmount, setUtxoAmount] = useState(100000);
 
   useEffect(() => {
     checkColdStatus();
@@ -104,6 +105,21 @@ export default function Cold() {
     try { return psbt.toBase64(); } catch {}
     try { return Buffer.from(psbt.toBuffer()).toString('base64'); } catch {}
     return '';
+  }
+
+  async function handleFetchUtxos() {
+    try {
+      setPsbtErr('');
+      const res = await fetch(`/api/utxos/${changeAddress}/${utxoAmount}`);
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error);
+      }
+      const utxos = await res.json();
+      setUtxosJson(JSON.stringify(utxos, null, 2));
+    } catch (e) {
+      setPsbtErr(String(e?.message || e));
+    }
   }
 
   async function handleBuildFunding() {
@@ -384,10 +400,19 @@ export default function Cold() {
         <p className="text-sm text-zinc-500">Paste UTXOs JSON and parameters to build a PSBT paying to the claim leaf.</p>
         <div className="grid md:grid-cols-2 gap-3">
           <label className="space-y-1 md:col-span-2">
-            <div className="text-sm text-zinc-500">UTXOs (JSON array)</div>
-            <textarea className="w-full rounded border px-3 py-2 font-mono min-h-[120px]" value={utxosJson} onChange={e=>setUtxosJson(e.target.value)} />
-            <div className="text-xs text-zinc-500">Each item: txid, vout, value, scriptHex. Value in sats. Example scriptHex for P2WPKH is the witness output script (e.g., 0014...)</div>
+            <div className="text-sm text-zinc-500">Funding Address</div>
+            <input className="w-full rounded border px-3 py-2" value={changeAddress} onChange={e=>setChangeAddress(e.target.value)} />
           </label>
+          <label className="space-y-1">
+            <div className="text-sm text-zinc-500">Amount (sats)</div>
+            <input type="number" className="w-full rounded border px-3 py-2" value={utxoAmount} onChange={e=>setUtxoAmount(Number(e.target.value)||0)} />
+          </label>
+          <div className="md:col-span-2">
+            <button onClick={handleFetchUtxos} className="px-3 py-2 rounded bg-blue-600 text-white">Fetch UTXOs</button>
+          </div>
+          <div className="md:col-span-2">
+            <textarea className="w-full rounded border px-3 py-2 font-mono min-h-[120px]" value={utxosJson} onChange={e=>setUtxosJson(e.target.value)} />
+          </div>
           <label className="space-y-1">
             <div className="text-sm text-zinc-500">Send value (sats)</div>
             <input type="number" className="w-full rounded border px-3 py-2" value={sendValueSat} onChange={e=>setSendValueSat(Number(e.target.value)||0)} />

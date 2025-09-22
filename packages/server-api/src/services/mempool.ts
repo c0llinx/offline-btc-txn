@@ -1,9 +1,15 @@
 import axios, { AxiosError } from 'axios';
-import { UTXO, TransactionStatus, AddressInfo, FeeEstimate, ErrorResponse } from '../shared/types.js';
+import { UTXO, TransactionStatus, AddressInfo, FeeEstimate } from '../../../../src/shared/types';
 
-export class MempoolAPI {
-  private readonly baseURL = 'https://mempool.space/testnet/api';
+export type Network = 'mainnet' | 'testnet';
+
+export class MempoolService {
+  private readonly baseURL: string;
   private readonly requestDelay = 1000; // 1 second between requests to avoid rate limiting
+
+  constructor(network: Network = 'mainnet') {
+    this.baseURL = `https://mempool.space/${network === 'testnet' ? 'testnet/' : ''}api`;
+  }
 
   /**
    * Fetch UTXOs for a given address

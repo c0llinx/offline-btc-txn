@@ -8,7 +8,7 @@
     "dev": "node --loader ts-node/esm src/server/server.ts",
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
-    "start": "node dist/server/server.js"
+    "start": "node dist/src/server/server.js"
   },
   "keywords": [
     "bitcoin",
