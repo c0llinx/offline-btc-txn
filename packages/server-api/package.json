@@ -8,8 +8,8 @@
     "start": "ts-node src/server.ts"
   },
   "dependencies": {
-    "@offline/offline-core": "workspace:*",
-    "@offline/offline-interop": "workspace:*",
+    "@offline/core": "workspace:*",
+    "@offline/interop": "workspace:*",
     "@offline/shared-types": "workspace:*",
     "axios": "^1.6.0",
     "cors": "^2.8.5",

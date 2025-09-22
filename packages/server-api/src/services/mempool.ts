@@ -17,13 +17,14 @@ export class MempoolService {
   async getAddressUTXOs(address: string): Promise<UTXO[]> {
     try {
       await this.delay(this.requestDelay);
-      
-      const response = await axios.get(`${this.baseURL}/address/${address}/utxo`, {
+      const url =`${this.baseURL}/address/${address}/utxo`
+      const response = await axios.get(url, {
         timeout: 10000,
         headers: {
           'User-Agent': 'Bitcoin-Taproot-Calculator/1.0.0'
         }
       });
+      console.log(`response from ${url} is ${response.data}`)
 
       // Fetch scriptPubKey for each UTXO by getting transaction details
       const utxosWithScripts = await Promise.all(

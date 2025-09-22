@@ -66,6 +66,9 @@ importers:
       '@offline/interop':
         specifier: workspace:*
         version: link:../../packages/offline-interop
+      '@offline/server-api':
+        specifier: workspace:*
+        version: link:../../packages/server-api
       buffer:
         specifier: ^6.0.3
         version: 6.0.3
@@ -156,6 +159,39 @@ importers:
       vitest:
         specifier: ^1.6.0
         version: 1.6.1(@types/node@20.19.12)(terser@5.44.0)
+
+  packages/server-api:
+    dependencies:
+      '@offline/core':
+        specifier: workspace:*
+        version: link:../offline-core
+      '@offline/interop':
+        specifier: workspace:*
+        version: link:../offline-interop
+      '@offline/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
+      axios:
+        specifier: ^1.6.0
+        version: 1.11.0
+      cors:
+        specifier: ^2.8.5
+        version: 2.8.5
+      express:
+        specifier: ^4.18.2
+        version: 4.21.2
+    devDependencies:
+      '@types/cors':
+        specifier: ^2.8.17
+        version: 2.8.19
+      '@types/express':
+        specifier: ^4.17.21
+        version: 4.17.23
+      ts-node:
+        specifier: ^10.9.2
+        version: 10.9.2(@types/node@20.19.12)(typescript@5.9.2)
+
+  packages/shared-types: {}
 
 packages:
 

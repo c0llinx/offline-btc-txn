@@ -21,7 +21,8 @@
     "framer-motion": "^11.0.0",
     "@offline/core": "workspace:*",
     "@offline/interop": "workspace:*",
-    "buffer": "^6.0.3"
+    "buffer": "^6.0.3",
+    "@offline/server-api": "workspace:*"
   },
   "devDependencies": {
     "eslint": "^8.57.0",
