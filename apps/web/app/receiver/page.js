@@ -40,6 +40,16 @@ export default function Receiver() {
   const [estFee, setEstFee] = useState(302);
   const [estNote, setEstNote] = useState("");
 
+  const [isFormFilled, setIsFormFilled] = useState(false);
+
+  function handleSelectUtxo(utxo) {
+    setFundTxId(decodedTxid);
+    setFundVout(utxo.i);
+    setPrevoutValue(utxo.value);
+    setPrevoutScriptHex(utxo.scriptHex);
+    setIsFormFilled(true);
+  }
+
   // Decode funding tx helper (no auto-fill)
   const [helperNet, setHelperNet] = useState('testnet');
   const [txHex, setTxHex] = useState('');
@@ -137,15 +147,15 @@ export default function Receiver() {
     return null;
   }
 
-  function handleDecodeTx() {
+  function handleDecodeTx(hex) {
     try {
       setTxDecodeErr('');
       setDecodedOuts([]);
       setDecodedTxid('');
-      const hex = (txHex || '').trim();
-      if (!hex) throw new Error('Paste a raw transaction hex');
+      const txHex = (hex || '').trim();
+      if (!txHex) return;
       const net = networkForKey(helperNet);
-      const tx = bitcoin.Transaction.fromHex(hex);
+      const tx = bitcoin.Transaction.fromHex(txHex);
       try { setDecodedTxid(tx.getId()); } catch {}
       const outs = tx.outs.map((o, i) => {
         const scriptHex = Buffer.from(o.script).toString('hex');
@@ -154,8 +164,35 @@ export default function Receiver() {
         return { i, value: o.value, scriptHex, address: addr, isTarget };
       });
       setDecodedOuts(outs);
+
+      if (outs.length === 1) {
+        handleSelectUtxo(outs[0]);
+      }
     } catch (e) {
       setTxDecodeErr(String(e?.message || e));
+    }
+  }
+
+  async function fetchRawTx(txid) {
+    try {
+      const res = await fetch(`/api/tx/${txid}`);
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error);
+      }
+      const { rawTx } = await res.json();
+      setTxHex(rawTx);
+      handleDecodeTx(rawTx);
+    } catch (e) {
+      setTxDecodeErr(String(e?.message || e));
+    }
+  }
+
+  function handleTxIdChange(e) {
+    const txid = e.target.value;
+    setFundTxId(txid);
+    if (txid.length === 64) {
+      fetchRawTx(txid);
     }
   }
 
@@ -555,30 +592,15 @@ export default function Receiver() {
       </section>
 
       <section className="rounded-lg border p-4 space-y-3">
-        <h2 className="font-medium">Decode Funding TX (helper)</h2>
-        <p className="text-sm text-zinc-500">Paste your funding tx hex and (optionally) the Taproot address. This lists all outputs so you can identify the correct vout/value/script. No auto-fill is performed.</p>
-        <div className="grid md:grid-cols-2 gap-3">
-          <label className="space-y-1">
-            <div className="text-sm text-zinc-500">Network</div>
-            <select className="w-full rounded border px-3 py-2" value={helperNet} onChange={e=>setHelperNet(e.target.value)}>
-              <option value="signet">signet</option>
-              <option value="testnet">testnet</option>
-              <option value="mainnet">mainnet</option>
-            </select>
-          </label>
-          <label className="space-y-1">
-            <div className="text-sm text-zinc-500">Target address (optional)</div>
-            <input className="w-full rounded border px-3 py-2" value={targetAddr} onChange={e=>setTargetAddr(e.target.value)} placeholder="tb1p... (or bc1p...)" />
-          </label>
-          <label className="space-y-1 md:col-span-2">
-            <div className="text-sm text-zinc-500">Raw transaction hex</div>
-            <textarea className="w-full rounded border px-3 py-2 font-mono min-h-[100px]" value={txHex} onChange={e=>setTxHex(e.target.value)} />
-          </label>
-        </div>
-        <div className="flex items-center gap-2">
-          <button onClick={handleDecodeTx} className="px-3 py-2 rounded bg-blue-600 text-white">Decode TX</button>
-          {!!txDecodeErr && <div className="text-sm text-red-600">{txDecodeErr}</div>}
-        </div>
+        <h2 className="font-medium">Funding Transaction</h2>
+        <p className="text-sm text-zinc-500">Paste the transaction ID of the funding transaction.</p>
+        <input
+          className="w-full rounded border px-3 py-2 font-mono"
+          placeholder="Enter transaction ID"
+          value={fundTxId}
+          onChange={handleTxIdChange}
+        />
+        {!!txDecodeErr && <div className="text-sm text-red-600">{txDecodeErr}</div>}
         {(decodedTxid || decodedOuts.length > 0) && (
           <div className="text-sm space-y-2">
             {decodedTxid && (
@@ -587,21 +609,29 @@ export default function Receiver() {
                 <div className="font-mono break-all">{decodedTxid}</div>
               </div>
             )}
-            {decodedOuts.length > 0 && <div className="text-zinc-500">Outputs ({decodedOuts.length})</div>}
-            <div className="grid gap-2">
-              {decodedOuts.map(o => (
-                <div key={o.i} className={`text-xs rounded border p-2 ${o.isTarget ? 'bg-emerald-50 border-emerald-300' : 'bg-zinc-50'}`}>
-                  <div><b>vout</b>: {o.i} {o.isTarget && <span className="text-emerald-700">(matches target)</span>}</div>
-                  <div><b>value (sats)</b>: {o.value}</div>
-                  <div><b>address</b>: <span className="font-mono">{o.address || 'n/a'}</span></div>
-                  <div><b>script (hex)</b>: <span className="font-mono break-all">{o.scriptHex}</span></div>
+            {decodedOuts.length > 0 && (
+              <div>
+                <div className="text-zinc-500">Outputs ({decodedOuts.length})</div>
+                <div className="grid gap-2">
+                  {decodedOuts.map(o => (
+                    <div key={o.i} className={`text-xs rounded border p-2 ${o.isTarget ? 'bg-emerald-50 border-emerald-300' : 'bg-zinc-50'}`}>
+                      <div><b>vout</b>: {o.i} {o.isTarget && <span className="text-emerald-700">(matches target)</span>}</div>
+                      <div><b>value (sats)</b>: {o.value}</div>
+                      <div><b>address</b>: <span className="font-mono">{o.address || 'n/a'}</span></div>
+                      <div><b>script (hex)</b>: <span className="font-mono break-all">{o.scriptHex}</span></div>
+                      <div className="mt-2">
+                        <button onClick={() => handleSelectUtxo(o)} className="text-xs px-2 py-1 rounded bg-blue-600 text-white">Use this output</button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-            <div className="text-xs text-zinc-500">Copy the vout, value, and script (hex) for the output paying your Taproot address and paste into the Build Claim PSBT section below.</div>
+              </div>
+            )}
           </div>
         )}
       </section>
+
+
 
       <section className="rounded-lg border p-4 space-y-3">
         <h2 className="font-medium">Claim Bundle</h2>
@@ -631,19 +661,19 @@ export default function Receiver() {
           <div className="grid md:grid-cols-2 gap-3">
             <label className="space-y-1 md:col-span-2">
               <div className="text-sm text-zinc-500">Funding txid (hex)</div>
-              <input className="w-full rounded border px-3 py-2 font-mono" value={fundTxId} onChange={e=>setFundTxId(e.target.value)} />
+              <input className="w-full rounded border px-3 py-2 font-mono" value={fundTxId} onChange={e=>setFundTxId(e.target.value)} readOnly={isFormFilled} />
             </label>
             <label className="space-y-1">
               <div className="text-sm text-zinc-500">vout</div>
-              <input type="number" className="w-full rounded border px-3 py-2" value={fundVout} onChange={e=>setFundVout(Number(e.target.value)||0)} />
+              <input type="number" className="w-full rounded border px-3 py-2" value={fundVout} onChange={e=>setFundVout(Number(e.target.value)||0)} readOnly={isFormFilled} />
             </label>
             <label className="space-y-1">
               <div className="text-sm text-zinc-500">Prevout value (sats)</div>
-              <input type="number" className="w-full rounded border px-3 py-2" value={prevoutValue} onChange={e=>setPrevoutValue(Number(e.target.value)||0)} />
+              <input type="number" className="w-full rounded border px-3 py-2" value={prevoutValue} onChange={e=>setPrevoutValue(Number(e.target.value)||0)} readOnly={isFormFilled} />
             </label>
             <label className="space-y-1 md:col-span-2">
               <div className="text-sm text-zinc-500">Prevout script (hex) — P2TR output script</div>
-              <input className="w-full rounded border px-3 py-2 font-mono" value={prevoutScriptHex} onChange={e=>setPrevoutScriptHex(e.target.value)} placeholder="e.g., 5120..." />
+              <input className="w-full rounded border px-3 py-2 font-mono" value={prevoutScriptHex} onChange={e=>setPrevoutScriptHex(e.target.value)} placeholder="e.g., 5120..." readOnly={isFormFilled} />
             </label>
             <label className="space-y-1">
               <div className="text-sm text-zinc-500">Destination address</div>

@@ -1,8 +1,10 @@
 "use client";
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { NETWORKS, buildClaimRefundTaproot, buildFundingPsbt, generateBurnedInternalKey } from '@offline/core';
 import { encode as cborEncode } from 'cbor-x';
 import { encodeUR, decodeUR } from '@offline/core';
+import QRCode from 'qrcode';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 
@@ -28,6 +30,8 @@ export default function Cold() {
   const [changeAddress, setChangeAddress] = useState('');
   const [psbtB64, setPsbtB64] = useState('');
   const [psbtUR, setPsbtUR] = useState('');
+  const [psbtQR, setPsbtQR] = useState('');
+  const [signerURL, setSignerURL] = useState('');
   const [psbtErr, setPsbtErr] = useState('');
   const [guidedOpen, setGuidedOpen] = useState(true);
   const [rPrivNotice, setRPrivNotice] = useState('');
@@ -155,6 +159,19 @@ export default function Cold() {
         guard++;
       }
       setPsbtUR(parts.join('\n'));
+
+      const url = new URL('/signer', window.location.origin);
+      url.searchParams.set('psbt', parts.join('\n'));
+      const signerURL = url.toString();
+      setSignerURL(signerURL);
+
+      QRCode.toDataURL(signerURL, { errorCorrectionLevel: 'L', scale: 4 }, (err, qrUrl) => {
+        if (err) {
+          setPsbtErr('Failed to generate QR code');
+          return;
+        }
+        setPsbtQR(qrUrl);
+      });
     } catch (e) {
       setPsbtErr(String(e?.message || e));
     }
@@ -441,6 +458,18 @@ export default function Cold() {
             <div className="text-zinc-500">PSBT (UR part)</div>
             <textarea className="w-full rounded border px-3 py-2 font-mono min-h-[80px]" readOnly value={psbtUR} />
             <div className="text-xs text-zinc-500">Scan or transfer this to your signing device/app.</div>
+          </div>
+        )}
+        {psbtQR && (
+          <div className="text-sm space-y-1">
+            <div className="text-zinc-500">PSBT QR Code</div>
+            <img src={psbtQR} alt="Signer URL QR Code" />
+          </div>
+        )}
+        {signerURL && (
+          <div className="text-sm space-y-1">
+            <div className="text-zinc-500">Signer URL</div>
+            <input className="w-full rounded border px-3 py-2 font-mono" readOnly value={signerURL} />
           </div>
         )}
       </div>

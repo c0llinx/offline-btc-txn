@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
+import { useSearchParams } from 'next/navigation';
 import * as bitcoin from "bitcoinjs-lib";
 import * as ecc from "@bitcoinerlab/secp256k1";
 import { ECPairFactory } from "ecpair";
@@ -8,26 +9,10 @@ import { schnorr as nobleSchnorr } from "@noble/curves/secp256k1";
 import { decodeUR } from "@offline/core";
 
 export default function Signer() {
-  useMemo(() => { try { bitcoin.initEccLib(ecc); } catch {} }, []);
+  const searchParams = useSearchParams();
 
-  const [networkKey, setNetworkKey] = useState("testnet");
-  const [psbtInput, setPsbtInput] = useState("");
-  const [psbtBuf, setPsbtBuf] = useState(null);
-  const [importErr, setImportErr] = useState("");
-  const [psbtInfo, setPsbtInfo] = useState(null);
 
-  const [inputIndex, setInputIndex] = useState(0);
-  const [preimageInput, setPreimageInput] = useState("");
-  const [rPrivInput, setRPrivInput] = useState("");
-  const [signErr, setSignErr] = useState("");
-  const [signedHex, setSignedHex] = useState("");
-
-  const network = useMemo(() => {
-    if (networkKey === "mainnet") return bitcoin.networks.bitcoin;
-    return bitcoin.networks.testnet; // use testnet params for signet & testnet
-  }, [networkKey]);
-
-  async function handleImportPsbt() {
+  const handleImportPsbt = useCallback(async () => {
     setImportErr("");
     setPsbtInfo(null);
     setPsbtBuf(null);
@@ -55,7 +40,15 @@ export default function Signer() {
     } catch (e) {
       setImportErr(String(e?.message || e));
     }
-  }
+  }, [psbtInput, network]);
+
+  useEffect(() => {
+    const psbtFromQuery = searchParams.get('psbt');
+    if (psbtFromQuery) {
+      setPsbtInput(psbtFromQuery);
+      handleImportPsbt();
+    }
+  }, [searchParams, handleImportPsbt]);
 
   function toU8(x) {
     if (x instanceof Uint8Array) return x;

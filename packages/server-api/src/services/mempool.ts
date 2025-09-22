@@ -24,7 +24,6 @@ export class MempoolService {
           'User-Agent': 'Bitcoin-Taproot-Calculator/1.0.0'
         }
       });
-      console.log(`response from ${url} is ${response.data}`)
 
       // Fetch scriptPubKey for each UTXO by getting transaction details
       const utxosWithScripts = await Promise.all(
@@ -38,7 +37,7 @@ export class MempoolService {
               txid: utxo.txid,
               vout: utxo.vout,
               value: utxo.value,
-              scriptPubKey: scriptPubKey,
+              scriptHex: scriptPubKey,
               address: address,
               confirmations: utxo.status?.confirmed ? utxo.status.block_height : 0
             };

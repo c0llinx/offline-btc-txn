@@ -13,7 +13,6 @@ class UTXOService {
 
   async getUTXOsForAmount(address: string, amount: number) {
     const utxos = await this.mempoolService.getAddressUTXOs(address);
-    console.log(`utxos are ${utxos}`)
 
     // Sort UTXOs by value in ascending order
     const sortedUtxos = utxos.sort((a, b) => a.value - b.value);
