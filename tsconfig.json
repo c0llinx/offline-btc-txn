@@ -8,22 +8,26 @@
     "moduleResolution": "node",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "noEmit": true,
+    "noEmit": false,
     "jsx": "preserve",
     "strict": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": ".",
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
-    "allowImportingTsExtensions": true,
+    "baseUrl": ".",
+    "paths": {
+      "@offline/shared-types": ["packages/shared-types/src/index.ts"]
+    },
+    
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "packages/**/*"],
   "exclude": ["node_modules", "dist"]
 }

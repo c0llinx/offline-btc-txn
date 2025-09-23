@@ -1,9 +1,15 @@
 import axios, { AxiosError } from 'axios';
-import { UTXO, TransactionStatus, AddressInfo, FeeEstimate, ErrorResponse } from '../shared/types.js';
+import { UTXO, TransactionStatus, AddressInfo, FeeEstimate } from '@offline/shared-types';
 
-export class MempoolAPI {
-  private readonly baseURL = 'https://mempool.space/testnet/api';
+export type Network = 'mainnet' | 'testnet';
+
+export class MempoolService {
+  private readonly baseURL: string;
   private readonly requestDelay = 1000; // 1 second between requests to avoid rate limiting
+
+  constructor(network: Network = 'mainnet') {
+    this.baseURL = `https://mempool.space/${network === 'testnet' ? 'testnet/' : ''}api`;
+  }
 
   /**
    * Fetch UTXOs for a given address
@@ -11,8 +17,8 @@ export class MempoolAPI {
   async getAddressUTXOs(address: string): Promise<UTXO[]> {
     try {
       await this.delay(this.requestDelay);
-      
-      const response = await axios.get(`${this.baseURL}/address/${address}/utxo`, {
+      const url =`${this.baseURL}/address/${address}/utxo`
+      const response = await axios.get(url, {
         timeout: 10000,
         headers: {
           'User-Agent': 'Bitcoin-Taproot-Calculator/1.0.0'
@@ -31,7 +37,7 @@ export class MempoolAPI {
               txid: utxo.txid,
               vout: utxo.vout,
               value: utxo.value,
-              scriptPubKey: scriptPubKey,
+              scriptHex: scriptPubKey,
               address: address,
               confirmations: utxo.status?.confirmed ? utxo.status.block_height : 0
             };

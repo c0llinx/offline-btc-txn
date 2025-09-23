@@ -2,6 +2,7 @@ import webpack from 'webpack';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  transpilePackages: ['@offline/server-api'],
   reactStrictMode: true,
   webpack: (config) => {
     config.plugins.push(

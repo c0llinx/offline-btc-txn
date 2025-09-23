@@ -2,7 +2,7 @@ import * as bitcoin from 'bitcoinjs-lib';
 import { Tapleaf } from 'bitcoinjs-lib/src/types.js';
 import { ECPairFactory, ECPairInterface } from 'ecpair';
 import * as ecc from 'tiny-secp256k1';
-import { SenderData, OfflineTxoData, ReceiverClaimData, SenderRefundData, SignedTransaction, UTXO } from '../shared/types.js';
+import { SenderData, OfflineTxoData, ReceiverClaimData, SenderRefundData, SignedTransaction, UTXO } from '@offline/shared-types';
 import { randomBytes } from 'crypto';
 
 // Initialize ECC library
@@ -106,7 +106,7 @@ export class OfflineBtcWallet {
 
     // 4. Build PSBT
     const psbt = new bitcoin.Psbt({ network: this.network });
-    const totalInputValue = utxos.reduce((sum, utxo) => sum + utxo.value, 0);
+    const totalInputValue = utxos.reduce((sum: number, utxo: UTXO) => sum + utxo.value, 0);
 
     // A rough fee estimation
     const estimatedSize = 10 + (utxos.length * 68) + (2 * 43); // base + inputs + outputs
