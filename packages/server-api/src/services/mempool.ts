@@ -1,5 +1,5 @@
 import axios, { AxiosError } from 'axios';
-import { UTXO, TransactionStatus, AddressInfo, FeeEstimate } from '../../../../src/shared/types';
+import { UTXO, TransactionStatus, AddressInfo, FeeEstimate } from '@offline/shared-types';
 
 export type Network = 'mainnet' | 'testnet';
 

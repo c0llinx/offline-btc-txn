@@ -19,6 +19,10 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@offline/shared-types": ["packages/shared-types/src/index.ts"]
+    },
     
     "declaration": true,
     "declarationMap": true,

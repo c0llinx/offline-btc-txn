@@ -1,4 +1,4 @@
-import { MempoolService } from './mempool.ts';
+import { MempoolService } from './mempool';
 
 class UTXOService {
   private mempoolService: MempoolService;

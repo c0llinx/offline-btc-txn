@@ -7,7 +7,7 @@ import {
   KeyPair,
   Operation,
   ErrorResponse 
-} from '../shared/types.js';
+} from '@offline/shared-types';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -435,7 +435,7 @@ export class TaprootCalculatorService {
   }
 
   private getOperationSymbol(operation: Operation): string {
-    const symbols = { add: '+', subtract: '-', multiply: '×', divide: '÷' };
+    const symbols: Record<Operation, string> = { add: '+', subtract: '-', multiply: '×', divide: '÷' };
     return symbols[operation] || '?';
   }
 
