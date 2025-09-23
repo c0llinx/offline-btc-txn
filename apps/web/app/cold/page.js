@@ -13,7 +13,6 @@ import QRCode from "qrcode";
 import * as bitcoin from "bitcoinjs-lib";
 import * as ecc from "@bitcoinerlab/secp256k1";
 
-
 export default function Cold() {
   const [status, setStatus] = useState("checking...");
   // Claim/Refund generator state
@@ -43,6 +42,7 @@ export default function Cold() {
   const [psbtUR, setPsbtUR] = useState("");
   const [psbtQR, setPsbtQR] = useState("");
   const [claimQR, setClaimQR] = useState("");
+  const [receiverURL, setReceiverURL] = useState("");
   const [signerURL, setSignerURL] = useState("");
   const [psbtErr, setPsbtErr] = useState("");
   const [guidedOpen, setGuidedOpen] = useState(true);
@@ -360,13 +360,13 @@ export default function Cold() {
       }
       setClaimBundleUR(parts.join("\n"));
 
-      const url = new URL("/signer", window.location.origin);
-      url.searchParams.set("psbt", claimBundleUR);
-      const signerURL = url.toString();
-      setSignerURL(signerURL);
+      const url = new URL("/receiver", window.location.origin);
+      url.searchParams.set("claim", claimBundleUR);
+      const receiverURL = url.toString();
+      setReceiverURL(receiverURL);
 
       QRCode.toDataURL(
-        signerURL,
+        receiverURL,
         { errorCorrectionLevel: "L", scale: 4 },
         (err, qrUrl) => {
           if (err) {
@@ -622,7 +622,17 @@ export default function Cold() {
         {claimQR && (
           <div className="text-sm space-y-1">
             <div className="text-zinc-500">Claim QR Code</div>
-            <img src={claimQR} alt="Signer URL QR Code" />
+            <img src={claimQR} alt="Receiver URL QR Code" />
+          </div>
+        )}
+        {receiverURL && (
+          <div className="text-sm space-y-1">
+            <div className="text-zinc-500">Receiver URL</div>
+            <input
+              className="w-full rounded border px-3 py-2 font-mono"
+              readOnly
+              value={receiverURL}
+            />
           </div>
         )}
       </div>
