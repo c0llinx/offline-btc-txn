@@ -337,6 +337,9 @@ export default function Cold() {
         script: leaves.claim,
         leaf_ver: 0xc0,
         control,
+        internal_pubkey: internalPubkey,
+        address: addr,
+        send_value_sat: Number(sendValueSat) || 0, // Add this line
         expires_at: Number(expiry) || 0,
       };
       const cbor = cborEncode(bundle);

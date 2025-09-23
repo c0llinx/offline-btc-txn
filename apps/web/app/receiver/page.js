@@ -53,9 +53,55 @@ export default function Receiver() {
     const claimFromUrl = searchParams.get("claim");
     if (claimFromUrl) {
       setClaimInput(claimFromUrl);
-      handleClaimDecode(claimFromUrl);
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    if (claimInput) {
+      handleClaimDecode();
+    }
+  }, [claimInput]);
+
+  useEffect(() => {
+    if (claimParsed) {
+      setDestAddress(claimParsed.address || "");
+      if (claimParsed.send_value_sat) {
+        setDestValue(claimParsed.send_value_sat);
+      }
+    }
+    if (claimParsed && fundTxId && fundTxId.length === 64) {
+      autofillFromTx(fundTxId);
+    }
+  }, [claimParsed, fundTxId]);
+
+  async function autofillFromTx(txid) {
+    try {
+      const res = await fetch(`/api/tx/${txid}`);
+      if (!res.ok) return;
+      const { rawTx } = await res.json();
+      const tx = bitcoin.Transaction.fromHex(rawTx);
+
+      const expectedAddress = claimParsed.address;
+
+      for (let i = 0; i < tx.outs.length; i++) {
+        const out = tx.outs[i];
+        const outAddress = bitcoin.address.fromOutputScript(
+          out.script,
+          bitcoin.networks.testnet,
+        ); // Or whatever network is appropriate
+        if (outAddress === expectedAddress) {
+          setFundVout(i);
+          setPrevoutValue(out.value);
+          setPrevoutScriptHex(out.script.toString("hex"));
+          setIsFormFilled(true);
+          break;
+        }
+      }
+    } catch (e) {
+      console.error("Autofill failed:", e);
+      // Handle errors silently, as this is an enhancement
+    }
+  }
 
   function handleSelectUtxo(utxo) {
     setFundTxId(decodedTxid);
@@ -201,8 +247,14 @@ export default function Receiver() {
       });
       setDecodedOuts(outs);
 
-      if (outs.length === 1) {
-        handleSelectUtxo(outs[0]);
+      const matchingUtxo = outs.find((o) => o.address === claimParsed?.address);
+
+      if (matchingUtxo) {
+        handleSelectUtxo(matchingUtxo);
+      } else if (claimParsed?.address) {
+        setTxDecodeErr(
+          `No output found matching the claim bundle's address: ${claimParsed.address}`,
+        );
       }
     } catch (e) {
       setTxDecodeErr(String(e?.message || e));
@@ -619,12 +671,11 @@ export default function Receiver() {
     }
   }
 
-  async function handleClaimDecode(claimOverride) {
+  async function handleClaimDecode() {
     try {
       setClaimErr("");
       setClaimParsed(null);
-      const claimData = claimOverride || claimInput;
-      const lines = (claimData || "")
+      const lines = (claimInput || "")
         .split(/\r?\n/)
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
@@ -805,7 +856,7 @@ export default function Receiver() {
                   {decodedOuts.map((o) => (
                     <div
                       key={o.i}
-                      className={`text-xs rounded border p-2 ${o.isTarget ? "bg-emerald-50 border-emerald-300" : "bg-zinc-50"}`}
+                      className={`text-xs rounded border p-2 text-zinc-900 ${o.isTarget ? "bg-emerald-50 border-emerald-300" : "bg-zinc-50"}`}
                     >
                       <div>
                         <b>vout</b>: {o.i}{" "}
@@ -865,14 +916,16 @@ export default function Receiver() {
           </button>
           {!!claimErr && <div className="text-sm text-red-600">{claimErr}</div>}
         </div>
-        {claimParsed && (
-          <div className="mt-2">
-            <div className="text-sm text-zinc-500">Parsed Claim Bundle</div>
-            <pre className="text-xs bg-zinc-50 border rounded p-2 overflow-x-auto">
-              {JSON.stringify(claimParsed, null, 2)}
-            </pre>
-          </div>
-        )}
+        {
+          //claimParsed && (
+          //<div className="mt-2">
+          //  <div className="text-sm text-zinc-500">Parsed Claim Bundle</div>
+          // <pre className="text-xs bg-zinc-50 border rounded p-2 overflow-x-auto">
+          //  {JSON.stringify(claimParsed, null, 2)}
+          //</pre>
+          //</div>
+        }
+        )
       </section>
 
       {claimParsed && (
