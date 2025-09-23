@@ -7,6 +7,7 @@ import { encodeUR, decodeUR } from "@offline/core";
 import { parseClaimBundle } from "@offline/interop";
 import * as bitcoin from "bitcoinjs-lib";
 import * as ecc from "@bitcoinerlab/secp256k1";
+import QRCode from "qrcode";
 
 export default function Receiver() {
   useMemo(() => {
@@ -38,6 +39,8 @@ export default function Receiver() {
   const [feeRate, setFeeRate] = useState(2);
   const [claimPsbtB64, setClaimPsbtB64] = useState("");
   const [claimPsbtUR, setClaimPsbtUR] = useState("");
+  const [claimPsbtQR, setClaimPsbtQR] = useState("");
+  const [signerURL, setSignerURL] = useState(""); // Add this line
   const [claimBuildErr, setClaimBuildErr] = useState("");
   const [guidedOpen, setGuidedOpen] = useState(true);
   const [changeAddress, setChangeAddress] = useState("");
@@ -374,6 +377,23 @@ export default function Receiver() {
         guard++;
       }
       setClaimPsbtUR(parts.join("\n"));
+
+      const url = new URL("/signer", window.location.origin);
+      url.searchParams.set("psbt", parts.join("\n"));
+      const signerURL = url.toString();
+      setSignerURL(signerURL); // Add this line
+
+      QRCode.toDataURL(
+        signerURL,
+        { errorCorrectionLevel: "L", scale: 4 },
+        (err, qrUrl) => {
+          if (err) {
+            setClaimBuildErr("Failed to generate QR code");
+            return;
+          }
+          setClaimPsbtQR(qrUrl);
+        },
+      );
     } catch (e) {
       setClaimBuildErr(String(e?.message || e));
     }
@@ -1059,6 +1079,22 @@ export default function Receiver() {
                 Transfer this to a signer that can provide a Schnorr signature
                 for R and the preimage for h.
               </div>
+            </div>
+          )}
+          {claimPsbtQR && (
+            <div className="text-sm space-y-1">
+              <div className="text-zinc-500">Claim PSBT QR Code</div>
+              <img src={claimPsbtQR} alt="Claim PSBT QR Code" />
+            </div>
+          )}
+          {signerURL && (
+            <div className="text-sm space-y-1">
+              <div className="text-zinc-500">Signer URL</div>
+              <input
+                className="w-full rounded border px-3 py-2 font-mono"
+                readOnly
+                value={signerURL}
+              />
             </div>
           )}
         </section>
