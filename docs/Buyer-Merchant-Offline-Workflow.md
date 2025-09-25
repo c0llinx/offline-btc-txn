@@ -3,7 +3,7 @@
 This guide explains how the wallet enables truly offline transaction flows using a Taproot contract with two paths: Claim (for the Merchant) and Refund (for the Buyer after expiry). It uses PSBT and UR encoding so that construction and signing can be split across air‑gapped devices.
 
 Roles and mapping
-- Merchant = Receiver using R key (can claim with preimage x)
+- Merchant = Receiver usinsetg R key (can claim with preimage x)
 - Buyer = Sender using S key (can refund after expiry H_exp)
 
 Key pages and code

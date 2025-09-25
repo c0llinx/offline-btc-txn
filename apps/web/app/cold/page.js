@@ -19,7 +19,8 @@ export default function Cold() {
   const [p2trOutHex, setP2trOutHex] = useState('');
   const [claimBundleUR, setClaimBundleUR] = useState('');
   const [genError, setGenError] = useState('');
-  const network = useMemo(() => NETWORKS[networkKey] || NETWORKS.signet, [networkKey]);
+  // Map testnet4 to bitcoinjs-lib's testnet params (same consensus params for addresses)
+  const network = useMemo(() => (networkKey === 'testnet4' ? NETWORKS.testnet : (NETWORKS[networkKey] || NETWORKS.signet)), [networkKey]);
 
   // Funding PSBT state
   const [utxosJson, setUtxosJson] = useState('[\n  {\n    "txid": "<txid>",\n    "vout": 0,\n    "value": 150000,\n    "scriptHex": "0014..."\n  }\n]');
@@ -91,6 +92,8 @@ export default function Cold() {
       list.push('https://blockstream.info/api/blocks/tip/height');
     } else if (netKey === 'signet') {
       list.push('https://mempool.space/signet/api/blocks/tip/height');
+    } else if (netKey === 'testnet4') {
+      list.push('https://mempool.space/testnet4/api/blocks/tip/height');
     } else {
       list.push('https://mempool.space/testnet/api/blocks/tip/height');
       list.push('https://blockstream.info/testnet/api/blocks/tip/height');
@@ -120,7 +123,7 @@ export default function Cold() {
     try {
       setTipNote('Fetching tip height...');
       const tip = await fetchTipHeight(networkKey);
-      const off = 2;
+      const off = 6;
       setExpiry(tip + off);
       setTipNote(`Set expiry to tip(${tip}) + ${off} = ${tip + off}`);
     } catch (e) {
@@ -362,6 +365,7 @@ export default function Cold() {
             <div className="text-sm text-zinc-500">Network</div>
             <select className="w-full rounded border px-3 py-2" value={networkKey} onChange={e=>setNetworkKey(e.target.value)}>
               <option value="signet">signet</option>
+              <option value="testnet4">testnet4</option>
               <option value="testnet">testnet</option>
               <option value="mainnet">mainnet</option>
             </select>
@@ -370,7 +374,7 @@ export default function Cold() {
             <div className="text-sm text-zinc-500">Expiry height (H_exp)</div>
             <div className="flex gap-2">
               <input type="number" className="w-full rounded border px-3 py-2" value={expiry} onChange={e=>setExpiry(Number(e.target.value)||0)} />
-              <button type="button" onClick={handleSetExpiryNearTip} className="px-2 rounded border text-sm whitespace-nowrap">Tip+2</button>
+              <button type="button" onClick={handleSetExpiryNearTip} className="px-2 rounded border text-sm whitespace-nowrap">Tip+6</button>
             </div>
             {tipNote && <div className="text-xs text-zinc-500">{tipNote}</div>}
           </label>
