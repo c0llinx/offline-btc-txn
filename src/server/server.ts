@@ -1,4 +1,9 @@
-import express from 'express';
+import express, {
+  type Application,
+  type NextFunction,
+  type Request,
+  type Response
+} from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import cors from 'cors';
@@ -20,7 +25,7 @@ process.on('uncaughtException', (err, origin) => {
   process.exit(1);
 });
 
-const app = express();
+const app: Application = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
@@ -278,7 +283,7 @@ app.post('/api/validate', (req, res) => {
 });
 
 // Error handling middleware
-app.use((error: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+app.use((error: Error, req: Request, res: Response, next: NextFunction) => {
   console.error('Unhandled error:', error);
   res.status(500).json({
     error: 'Internal server error',
