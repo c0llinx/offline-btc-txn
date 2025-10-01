@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useEffect } from "react";
+import { useMemo, useRef, useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { encode as cborEncode, decode as cborDecode } from "cbor-x";
 import { encodeUR, decodeUR } from "@offline/core";
@@ -9,7 +9,7 @@ import * as bitcoin from "bitcoinjs-lib";
 import * as ecc from "@bitcoinerlab/secp256k1";
 import QRCode from "qrcode";
 
-export default function Receiver() {
+function ReceiverContent() {
   useMemo(() => {
     try {
       bitcoin.initEccLib(ecc);
@@ -1192,5 +1192,13 @@ export default function Receiver() {
         )}
       </section>
     </main>
+  );
+}
+
+export default function Receiver() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ReceiverContent />
+    </Suspense>
   );
 }

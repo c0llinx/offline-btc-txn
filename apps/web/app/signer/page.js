@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect, useCallback } from "react";
+import { useMemo, useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import * as bitcoin from "bitcoinjs-lib";
 import * as ecc from "@bitcoinerlab/secp256k1";
@@ -8,7 +8,7 @@ import { ECPairFactory } from "ecpair";
 import { schnorr as nobleSchnorr } from "@noble/curves/secp256k1";
 import { decodeUR } from "@offline/core";
 
-export default function Signer() {
+function SignerContent() {
   const searchParams = useSearchParams();
 
   const [networkKey, setNetworkKey] = useState("signet");
@@ -343,5 +343,13 @@ export default function Signer() {
         )}
       </section>
     </main>
+  );
+}
+
+export default function Signer() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <SignerContent />
+    </Suspense>
   );
 }
