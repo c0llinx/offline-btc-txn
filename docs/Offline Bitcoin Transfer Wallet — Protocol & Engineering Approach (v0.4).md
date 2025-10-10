@@ -129,7 +129,7 @@ Cold Mode            Watch‑Only (online)             Receiver Wallet
 ## 7) Data Artifacts & Payload Schemas
 
 - **PSBTs:** `ur:crypto-psbt` (BIP‑174/371 with Taproot fields and control blocks where relevant).
-- **Claim Bundle (sender → receiver):** `ur:claim-bundle` v1 with `{ h_alg, preimage or h, R_pub, script, leaf_ver, control, fund_txid?, vout?, expires_at, meta }`.
+- **Claim Bundle (sender → receiver):** `ur:claim-bundle` v1 with `{ h_alg, preimage or h, R_pub, script, funding_script?, leaf_ver, control, fund_txid?, fund_tx?, vout?, value?, expires_at, broadcast_endpoint?, network?, meta }`.
 - **UTXO Snapshot (watch‑only → cold):** `ur:utxo-snapshot` with `{ height, tip, UTXOs, feerates, change template }`.
 
 ---

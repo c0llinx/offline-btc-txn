@@ -1,45 +1,39 @@
 {
-  "name": "real-bitcoin-taproot-calculator",
-  "version": "1.0.0",
-  "description": "Real Bitcoin Taproot calculator that creates actual testnet transactions",
-  "main": "dist/index.js",
+  "name": "offline-btc-web",
+  "version": "0.1.0",
+  "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx src/server/server.ts",
-    "build": "tsc && vite build",
-    "typecheck": "tsc --noEmit",
-    "start": "node dist/src/server/server.js"
+    "dev": "next dev",
+    "build": "next build",
+    "build:cold": "cross-env __COLD__=true next build",
+    "build:watch": "cross-env __COLD__=false next build",
+    "start": "next start",
+    "lint": "next lint"
   },
-  "keywords": [
-    "bitcoin",
-    "taproot",
-    "tapscript",
-    "calculator",
-    "testnet",
-    "real"
-  ],
-  "author": "",
-  "license": "MIT",
   "dependencies": {
-    "@bitcoinerlab/secp256k1": "^1.0.5",
-    "axios": "^1.6.0",
+    "next": "14.2.5",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "zustand": "^4.5.2",
+    "zod": "^3.23.8",
+    "lucide-react": "^0.446.0",
+    "framer-motion": "^11.0.0",
+    "axios": "^1.7.8",
     "bitcoinjs-lib": "^6.1.5",
-    "cors": "^2.8.5",
-    "ecpair": "^2.1.0",
-    "express": "^4.18.2",
-    "html5-qrcode": "^2.3.8",
+    "@bitcoinerlab/secp256k1": "^1.0.5",
+    "cbor-x": "^1.5.9",
     "qrcode": "^1.5.4",
-    "tiny-secp256k1": "^2.2.3"
+    "buffer": "^6.0.3"
   },
   "devDependencies": {
-    "@types/cors": "^2.8.17",
-    "@types/express": "^4.17.21",
-    "@types/node": "^20.19.11",
-    "@types/qrcode": "^1.5.5",
-    "ts-node": "^10.9.2",
-    "tsx": "^4.20.5",
-    "typescript": "^5.9.2",
-    "vite": "^5.0.0"
-  },
-  "packageManager": "pnpm@10.15.1+sha512.34e538c329b5553014ca8e8f4535997f96180a1d0f614339357449935350d924e22f8614682191264ec33d1462ac21561aff97f6bb18065351c162c7e8f6de67"
+    "eslint": "^8.57.0",
+    "eslint-config-next": "14.2.5",
+    "prettier": "^3.3.3",
+    "tailwindcss": "^3.4.10",
+    "postcss": "^8.4.40",
+    "autoprefixer": "^10.4.20",
+    "cross-env": "^7.0.3",
+    "webpack": "^5.91.0"
+  }
 }
