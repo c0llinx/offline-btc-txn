@@ -16,6 +16,7 @@ import { schnorr as nobleSchnorr, secp256k1 } from "@noble/curves/secp256k1";
 import { ECPairFactory } from "ecpair";
 import { getActiveWallet, loadWallets } from "@/lib/wallets";
 import { tapTweakHash, tweakKey } from "bitcoinjs-lib/src/payments/bip341";
+import { copyToClipboard } from "@/lib/clipboard";
 
 bitcoin.initEccLib(ecc);
 
@@ -277,13 +278,14 @@ export default function Cold() {
         url.searchParams.set("claim", part || "");
         const receiverLink = url.toString();
         setReceiverURL(receiverLink);
-        const canvas = document.createElement("canvas");
-        await QRCode.toCanvas(
-          canvas,
-          part || receiverLink,
-          { width: 240 },
-        );
-        setClaimQR(canvas.toDataURL("image/png"));
+        const qrPayload = part || receiverLink;
+        const dataUrl = await QRCode.toDataURL(qrPayload, {
+          errorCorrectionLevel: "M",
+          margin: 2,
+          scale: 8,
+          maskPattern: 3,
+        });
+        setClaimQR(dataUrl);
       }
     } catch (error) {
       setGenError(error instanceof Error ? error.message : String(error));
@@ -412,18 +414,36 @@ export default function Cold() {
         <section className="rounded-xl border p-4 space-y-3">
           <h2 className="font-semibold">Claim Bundle UR</h2>
           <div className="grid md:grid-cols-2 gap-3">
-            <textarea
-              className="w-full rounded border px-3 py-2 font-mono"
-              rows={6}
-              value={claimBundleUR}
-              readOnly
-            />
+            <div className="space-y-2">
+              <textarea
+                className="w-full rounded border px-3 py-2 font-mono"
+                rows={6}
+                value={claimBundleUR}
+                readOnly
+              />
+              <button
+                type="button"
+                className="px-3 py-2 rounded bg-zinc-800 text-white"
+                onClick={() => copyToClipboard(claimBundleUR)}
+              >
+                Copy Claim Bundle
+              </button>
+              {receiverURL && (
+                <div className="space-y-1">
+                  <code className="text-xs break-all text-zinc-500">{receiverURL}</code>
+                  <button
+                    type="button"
+                    className="px-3 py-2 rounded bg-zinc-200 text-zinc-900"
+                    onClick={() => copyToClipboard(receiverURL)}
+                  >
+                    Copy URL
+                  </button>
+                </div>
+              )}
+            </div>
             {claimQR && (
               <div className="flex flex-col items-center gap-2">
-                <img src={claimQR} alt="Claim bundle QR" className="w-48" />
-                {receiverURL && (
-                  <code className="text-xs break-all text-zinc-500">{receiverURL}</code>
-                )}
+                <img src={claimQR} alt="Claim bundle QR" className="w-60 border rounded" />
               </div>
             )}
           </div>
@@ -597,6 +617,11 @@ async function gatherWalletFundingInputs({ wallet, networkKey }) {
       if (Array.isArray(utxos) && utxos.length > 0) {
         changeAddress = candidate.address;
         const formatted = utxos.map((utxo) => {
+          const scriptHex = String(utxo.scriptHex || "").toLowerCase();
+          const isTaprootScript = scriptHex.startsWith("5120");
+          if (!isTaprootScript) {
+            return null;
+          }
           const base = {
             ...utxo,
             type: candidate.type,
@@ -612,7 +637,7 @@ async function gatherWalletFundingInputs({ wallet, networkKey }) {
           }
           return base;
         });
-        collected.push(...formatted);
+        collected.push(...formatted.filter(Boolean));
       }
     } catch (error) {
       console.warn("UTXO fetch failed for", candidate.address, error);

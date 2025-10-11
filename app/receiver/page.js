@@ -1,14 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useState, Suspense } from "react";
+import dynamic from "next/dynamic";
 import { Buffer } from "buffer";
 import { decodeUR } from "@/lib/offline-core";
 import { parseClaimBundle } from "@/lib/offline-interop";
 import { loadWallets, getActiveWallet, recordWalletEvent } from "@/lib/wallets";
+import { copyToClipboard } from "@/lib/clipboard";
 import * as bitcoin from "bitcoinjs-lib";
 import * as ecc from "@bitcoinerlab/secp256k1";
 import { ECPairFactory } from "ecpair";
 import { schnorr as nobleSchnorr } from "@noble/curves/secp256k1";
+
+const CameraScanner = dynamic(() => import("@/components/CameraScanner"), {
+  ssr: false,
+  loading: () => <div className="text-xs text-zinc-500">Loading camera...</div>,
+});
 
 bitcoin.initEccLib(ecc);
 
@@ -339,12 +346,18 @@ function ReceiverInner() {
 
       <section className="rounded-lg border p-4 space-y-3">
         <h2 className="font-medium">Claim Bundle</h2>
-        <textarea
-          className="w-full rounded border px-3 py-2 font-mono min-h-[120px]"
-          value={claimInput}
-          onChange={(event) => setClaimInput(event.target.value)}
-          placeholder="ur:claim-bundle/..."
-        />
+        <div className="grid md:grid-cols-2 gap-3">
+          <textarea
+            className="w-full rounded border px-3 py-2 font-mono min-h-[140px]"
+            value={claimInput}
+            onChange={(event) => setClaimInput(event.target.value)}
+            placeholder="ur:claim-bundle/..."
+          />
+          <div className="space-y-2">
+            <p className="text-xs text-zinc-500">Scan claim bundle QR:</p>
+            <CameraScanner onResult={(text) => setClaimInput(text)} />
+          </div>
+        </div>
         <div className="flex items-center gap-2">
           <button
             onClick={handleDecodeBundle}

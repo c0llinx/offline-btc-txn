@@ -11,7 +11,6 @@ export default function AddressTool() {
   const [networkKey, setNetworkKey] = useState("testnet4");
   const [privInput, setPrivInput] = useState("");
   const [err, setErr] = useState("");
-  const [p2wpkh, setP2wpkh] = useState(null);
   const [p2tr, setP2tr] = useState(null);
 
   const network = useMemo(() => {
@@ -30,7 +29,6 @@ export default function AddressTool() {
 
   function derive() {
     setErr("");
-    setP2wpkh(null);
     setP2tr(null);
     try {
       const ECPair = ECPairFactory(ecc);
@@ -48,13 +46,10 @@ export default function AddressTool() {
       const pub33 = Buffer.from(ecc.pointFromScalar(seckey, true));
       if (!pub33) throw new Error("Invalid private key");
 
-      // P2WPKH (tb1q...)
-      const wpkh = bitcoin.payments.p2wpkh({ pubkey: pub33, network });
       // P2TR single-key (tb1p...) using x-only
       const xonly = pub33.slice(1, 33);
       const tr = bitcoin.payments.p2tr({ internalPubkey: xonly, network });
 
-      setP2wpkh({ address: wpkh.address || "", scriptHex: (wpkh.output||Buffer.alloc(0)).toString("hex") });
       setP2tr({ address: tr.address || "", scriptHex: (tr.output||Buffer.alloc(0)).toString("hex") });
     } catch (e) {
       setErr(String(e?.message || e));
@@ -65,7 +60,7 @@ export default function AddressTool() {
     <main className="space-y-6">
       <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-600 text-white">TOOLS</div>
       <h1 className="text-2xl font-semibold">Address Tool</h1>
-      <p className="text-zinc-500">Derive a normal wallet address from a private key (WIF or 32-byte hex). Use the P2WPKH tb1q... as a simple destination address.</p>
+      <p className="text-zinc-500">Derive the Taproot (P2TR) address from a private key (WIF or 32-byte hex). All workflows use bech32m taproot addresses.</p>
 
       <section className="rounded-lg border p-4 space-y-3">
         <div className="grid md:grid-cols-2 gap-3">
@@ -89,23 +84,13 @@ export default function AddressTool() {
           {!!err && <div className="text-sm text-red-600">{err}</div>}
         </div>
 
-        {(p2wpkh || p2tr) && (
+        {p2tr && (
           <div className="grid md:grid-cols-2 gap-3 mt-2 text-sm">
-            {p2wpkh && (
-              <div className="rounded border p-2">
-                <div className="text-zinc-500">P2WPKH (bech32)</div>
-                <div className="font-mono break-all">{p2wpkh.address || '—'}</div>
-                <div className="text-xs text-zinc-500 mt-1">script (hex): <span className="font-mono break-all">{p2wpkh.scriptHex}</span></div>
-                <div className="text-xs text-zinc-500">Use this tb1q... as a simple destination address.</div>
-              </div>
-            )}
-            {p2tr && (
-              <div className="rounded border p-2">
-                <div className="text-zinc-500">P2TR single-key (bech32m)</div>
-                <div className="font-mono break-all">{p2tr.address || '—'}</div>
-                <div className="text-xs text-zinc-500 mt-1">script (hex): <span className="font-mono break-all">{p2tr.scriptHex}</span></div>
-              </div>
-            )}
+            <div className="rounded border p-2">
+              <div className="text-zinc-500">P2TR single-key (bech32m)</div>
+              <div className="font-mono break-all">{p2tr.address || '—'}</div>
+              <div className="text-xs text-zinc-500 mt-1">script (hex): <span className="font-mono break-all">{p2tr.scriptHex}</span></div>
+            </div>
           </div>
         )}
       </section>

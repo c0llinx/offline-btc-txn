@@ -15,20 +15,7 @@ import {
   setWalletBalance,
 } from "@/lib/wallets";
 
-function copyToClipboard(text) {
-  if (navigator?.clipboard?.writeText) {
-    return navigator.clipboard.writeText(text);
-  }
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.style.position = "fixed";
-  textarea.style.left = "-500px";
-  document.body.appendChild(textarea);
-  textarea.select();
-  document.execCommand("copy");
-  document.body.removeChild(textarea);
-  return Promise.resolve();
-}
+import { copyToClipboard } from "@/lib/clipboard";
 
 const networks = [
   { key: "testnet4", label: "Testnet4 (mempool.space)" },
@@ -230,7 +217,7 @@ export default function WalletManager() {
 
   async function handleRefresh(wallet) {
     if (!wallet) return;
-    const addresses = [wallet.p2wpkh, wallet.p2tr].filter(Boolean);
+    const addresses = [wallet.p2tr].filter(Boolean);
     if (addresses.length === 0) {
       showToast("No address to refresh", "error");
       return;
@@ -447,12 +434,6 @@ export default function WalletManager() {
                     <dt className="text-zinc-500">Addresses</dt>
                     <dd className="space-y-1">
                       <div>
-                        <div className="text-xs text-zinc-500">P2WPKH</div>
-                        <div className="font-mono break-all text-xs bg-zinc-100 dark:bg-zinc-800 rounded p-2">
-                          {wallet.p2wpkh || "—"}
-                        </div>
-                      </div>
-                      <div>
                         <div className="text-xs text-zinc-500">P2TR</div>
                         <div className="font-mono break-all text-xs bg-zinc-100 dark:bg-zinc-800 rounded p-2">
                           {wallet.p2tr || "—"}
@@ -460,14 +441,6 @@ export default function WalletManager() {
                       </div>
                     </dd>
                     <div className="flex gap-2 text-xs mt-2">
-                      {wallet.p2wpkh && (
-                        <button
-                          className="text-blue-600 hover:underline"
-                          onClick={() => handleCopy(wallet.p2wpkh, "P2WPKH address")}
-                        >
-                          Copy P2WPKH
-                        </button>
-                      )}
                       {wallet.p2tr && (
                         <button
                           className="text-blue-600 hover:underline"
