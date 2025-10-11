@@ -4,8 +4,22 @@ import { useState } from 'react';
 
 export const dynamic = 'force-dynamic';
 
+const NETWORK_ENDPOINTS = {
+  testnet4: 'https://mempool.space/testnet4',
+  testnet: 'https://mempool.space/testnet',
+  signet: 'https://mempool.space/signet',
+  mainnet: 'https://mempool.space',
+};
+const NETWORK_OPTIONS = [
+  { key: 'testnet4', label: 'Testnet4' },
+  { key: 'testnet', label: 'Testnet (legacy)' },
+  { key: 'signet', label: 'Signet' },
+  { key: 'mainnet', label: 'Mainnet' },
+];
+
 export default function Watch() {
-  const [endpoint, setEndpoint] = useState('https://mempool.space/testnet4');
+  const [network, setNetwork] = useState('testnet4');
+  const endpoint = NETWORK_ENDPOINTS[network] || NETWORK_ENDPOINTS.testnet4;
   const [hex, setHex] = useState('');
   const [status, setStatus] = useState('idle');
   const [result, setResult] = useState(null);
@@ -19,7 +33,7 @@ export default function Watch() {
       const r = await fetch('/api/broadcast', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ hex, endpoint }),
+        body: JSON.stringify({ hex, endpoint, network }),
       });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || `Broadcast failed (status ${j.status || r.status})`);
@@ -39,8 +53,22 @@ export default function Watch() {
 
       <section className="rounded-lg border p-4 space-y-3">
         <label className="space-y-1 block">
+          <div className="text-sm text-zinc-500">Network</div>
+          <select
+            className="w-full rounded border px-3 py-2"
+            value={network}
+            onChange={(event) => setNetwork(event.target.value)}
+          >
+            {NETWORK_OPTIONS.map((opt) => (
+              <option key={opt.key} value={opt.key}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="space-y-1 block">
           <div className="text-sm text-zinc-500">Node endpoint (POST /api/tx)</div>
-          <input className="w-full rounded border px-3 py-2" value={endpoint} onChange={e => setEndpoint(e.target.value)} />
+          <input className="w-full rounded border px-3 py-2 bg-zinc-100 text-zinc-500" value={endpoint} readOnly />
         </label>
         <label className="space-y-1 block">
           <div className="text-sm text-zinc-500">Raw transaction hex</div>

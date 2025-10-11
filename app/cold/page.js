@@ -42,6 +42,7 @@ export default function Cold() {
   const [fundingWalletId, setFundingWalletId] = useState("");
   const [fundingRaw, setFundingRaw] = useState("");
   const [broadcastEndpoint, setBroadcastEndpoint] = useState("");
+  const [manualUtxos, setManualUtxos] = useState([]);
 
   const network = useMemo(
     () => NETWORKS[networkKey] || NETWORKS.testnet4,
@@ -109,20 +110,13 @@ export default function Cold() {
 
   useEffect(() => {
     const walletNet = (fundingWallet?.network || "testnet4").toLowerCase();
-    const normalized = walletNet === "mainnet" ? "mainnet" : "testnet4";
+    const normalized = normalizeNetworkKey(walletNet);
     setNetworkKey(normalized);
   }, [fundingWallet]);
 
   useEffect(() => {
     const fallback = defaultEndpointForNetwork(networkKey);
-    setBroadcastEndpoint((prev) => {
-      if (!prev) return fallback;
-      const prevIsDefault = Object.values(BROADCAST_ENDPOINT_DEFAULTS).includes(prev);
-      if (prevIsDefault) {
-        return fallback;
-      }
-      return prev;
-    });
+    setBroadcastEndpoint(fallback);
   }, [networkKey]);
 
   useEffect(() => {
@@ -132,11 +126,38 @@ export default function Cold() {
       const fundHexParam = url.searchParams.get("fundtx") || url.searchParams.get("fund_tx");
       const endpointParam = url.searchParams.get("endpoint") || url.searchParams.get("broadcast");
       if (fundHexParam) setFundingRaw(fundHexParam.trim());
-      if (endpointParam) setBroadcastEndpoint(endpointParam.trim());
+      if (endpointParam) {
+        const sanitized = endpointParam.trim();
+        const normalizedEndpoint = sanitized.replace(/\/$/, "");
+        const defaultEndpoint = defaultEndpointForNetwork(networkKey);
+        setBroadcastEndpoint(
+          Object.values(BROADCAST_ENDPOINT_DEFAULTS).includes(normalizedEndpoint)
+            ? normalizedEndpoint
+            : defaultEndpoint,
+        );
+      }
     } catch {
       // ignore malformed URLs
     }
   }, []);
+
+  function updateManualUtxo(index, field, value) {
+    setManualUtxos((prev) =>
+      prev.map((entry, idx) =>
+        idx === index
+          ? { ...entry, [field]: field === "txid" ? value.trim() : value }
+          : entry,
+      ),
+    );
+  }
+
+  function addManualUtxo() {
+    setManualUtxos((prev) => [...prev, { txid: "", vout: "", value: "" }]);
+  }
+
+  function removeManualUtxo(index) {
+    setManualUtxos((prev) => prev.filter((_, idx) => idx !== index));
+  }
 
   async function handleGenerate() {
     try {
@@ -199,6 +220,7 @@ export default function Cold() {
             fundingScript: output,
             networkKey,
             network,
+            manualUtxos,
           });
           trimmedFundingHex = autoFunding.rawHex;
           setFundingRaw(autoFunding.rawHex);
@@ -387,6 +409,74 @@ export default function Cold() {
             />
           </label>
         </div>
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-medium text-sm">Manual funding UTXOs (optional)</h3>
+            <button
+              type="button"
+              onClick={addManualUtxo}
+              className="px-3 py-1.5 rounded border text-xs hover:bg-zinc-100"
+            >
+              + Add UTXO
+            </button>
+          </div>
+          <p className="text-xs text-zinc-500">
+            Use this when the device cannot reach mempool.space. Paste confirmed Taproot outputs for the funding wallet
+            (txid, output index, and value in sats) from mempool.space or your node. Leave blank to rely on automatic discovery.
+          </p>
+          {manualUtxos.length > 0 && (
+            <div className="space-y-3">
+              {manualUtxos.map((utxo, index) => (
+                <div
+                  key={`manual-utxo-${index}`}
+                  className="grid gap-2 md:grid-cols-[minmax(220px,2fr)_minmax(80px,1fr)_minmax(160px,1fr)_auto] items-end"
+                >
+                  <label className="space-y-1">
+                    <div className="text-xs text-zinc-500">Funding txid</div>
+                    <input
+                      className="w-full rounded border px-3 py-2 font-mono text-xs"
+                      placeholder="64-character hex"
+                      value={utxo.txid}
+                      onChange={(event) => updateManualUtxo(index, "txid", event.target.value)}
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <div className="text-xs text-zinc-500">vout</div>
+                    <input
+                      className="w-full rounded border px-3 py-2"
+                      type="number"
+                      min={0}
+                      value={utxo.vout}
+                      onChange={(event) => updateManualUtxo(index, "vout", event.target.value)}
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <div className="text-xs text-zinc-500">Value (sats)</div>
+                    <input
+                      className="w-full rounded border px-3 py-2"
+                      type="number"
+                      min={0}
+                      value={utxo.value}
+                      onChange={(event) => updateManualUtxo(index, "value", event.target.value)}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => removeManualUtxo(index)}
+                    className="px-2 py-2 rounded border text-xs text-red-600 hover:bg-red-50"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <div className="text-xs text-zinc-500">
+                The Taproot spending script is derived automatically from the funding wallet’s key material.
+              </div>
+            </div>
+          )}
+        </div>
+
         <button
           className="px-3 py-2 rounded bg-blue-600 text-white"
           onClick={handleGenerate}
@@ -443,7 +533,27 @@ export default function Cold() {
             </div>
             {claimQR && (
               <div className="flex flex-col items-center gap-2">
-                <img src={claimQR} alt="Claim bundle QR" className="w-60 border rounded" />
+                <img
+                  src={claimQR}
+                  alt="Claim bundle QR"
+                  width={320}
+                  height={320}
+                  className="border rounded bg-white"
+                  style={{ imageRendering: "pixelated" }}
+                  draggable={false}
+                />
+                <button
+                  type="button"
+                  className="text-xs text-blue-600 hover:underline"
+                  onClick={() => {
+                    const win = window.open();
+                    if (win) {
+                      win.document.write(`<img src="${claimQR}" style="image-rendering:pixelated" />`);
+                    }
+                  }}
+                >
+                  Open QR in new tab
+                </button>
               </div>
             )}
           </div>
@@ -484,6 +594,15 @@ function defaultEndpointForNetwork(networkKey) {
   return BROADCAST_ENDPOINT_DEFAULTS[key] || BROADCAST_ENDPOINT_DEFAULTS.testnet4;
 }
 
+function normalizeNetworkKey(networkKey) {
+  const key = String(networkKey || "").toLowerCase();
+  if (key === "mainnet") return "mainnet";
+  if (key === "testnet4") return "testnet4";
+  if (key === "testnet") return "testnet";
+  if (key === "signet") return "signet";
+  return "testnet4";
+}
+
 async function autoBuildFundingTransaction({
   wallet,
   amountSat,
@@ -491,12 +610,14 @@ async function autoBuildFundingTransaction({
   networkKey,
   network,
   feeRateSatVb = 2,
+  manualUtxos = [],
 }) {
   if (!wallet) throw new Error("Active wallet is required to build funding transaction");
 
   const { inputs, changeAddress, hasTaprootInputs } = await gatherWalletFundingInputs({
     wallet,
     networkKey,
+    manualUtxos,
   });
   if (!Array.isArray(inputs) || inputs.length === 0) {
     throw new Error("No spendable Taproot UTXOs found for this wallet. Fund it (or paste the funding transaction manually) before creating the claim bundle.");
@@ -525,6 +646,18 @@ async function autoBuildFundingTransaction({
     }
     return base;
   });
+  const totalInputValue = formattedUtxos.reduce(
+    (sum, utxo) => sum + Number(utxo.witnessUtxo?.value || 0),
+    0,
+  );
+  if (!(totalInputValue > 0)) {
+    throw new Error("No spendable Taproot UTXOs found for this wallet. Fund it (or paste the funding transaction manually) before creating the claim bundle.");
+  }
+  if (totalInputValue < amountSat) {
+    throw new Error(
+      `Insufficient Taproot funds: need at least ${amountSat} sats, have ${totalInputValue} sats. Fund the wallet or lower the commitment.`,
+    );
+  }
 
   const psbt = buildFundingPsbt({
     utxos: formattedUtxos,
@@ -597,19 +730,23 @@ async function fetchWalletUtxos(address, networkKey) {
   return payload.utxos || [];
 }
 
-async function gatherWalletFundingInputs({ wallet, networkKey }) {
+async function gatherWalletFundingInputs({ wallet, networkKey, manualUtxos = [] }) {
   const candidates = [];
-  const p2tr = (wallet.p2tr || "").trim();
-  if (p2tr) {
-    candidates.push({ address: p2tr, type: "p2tr" });
+  const tapAddresses = Array.isArray(wallet.taprootAddresses)
+    ? wallet.taprootAddresses
+    : [wallet.p2tr];
+  for (const addr of tapAddresses) {
+    const trimmed = (addr || "").trim();
+    if (trimmed) candidates.push({ address: trimmed, type: "p2tr" });
   }
   if (candidates.length === 0) {
     throw new Error("Active wallet does not have a Taproot (P2TR) address available.");
   }
 
   const collected = [];
-  let changeAddress = p2tr;
+  let changeAddress = (tapAddresses[0] || "").trim();
   let hasTaproot = false;
+  const fetchErrors = [];
 
   for (const candidate of candidates) {
     try {
@@ -620,6 +757,9 @@ async function gatherWalletFundingInputs({ wallet, networkKey }) {
           const scriptHex = String(utxo.scriptHex || "").toLowerCase();
           const isTaprootScript = scriptHex.startsWith("5120");
           if (!isTaprootScript) {
+            return null;
+          }
+          if (Number(utxo.confirmations || 0) <= 0) {
             return null;
           }
           const base = {
@@ -641,10 +781,69 @@ async function gatherWalletFundingInputs({ wallet, networkKey }) {
       }
     } catch (error) {
       console.warn("UTXO fetch failed for", candidate.address, error);
+      fetchErrors.push({ address: candidate.address, message: error instanceof Error ? error.message : String(error) });
     }
   }
 
-  return { inputs: collected, changeAddress, hasTaprootInputs: hasTaproot };
+  if (!collected.length && fetchErrors.length) {
+    throw new Error(
+      `Unable to locate confirmed Taproot UTXOs for ${wallet.label || "wallet"}. Last error: ${fetchErrors[fetchErrors.length - 1].message}`,
+    );
+  }
+
+  const manualList = Array.isArray(manualUtxos) ? manualUtxos : [];
+  if (manualList.length) {
+    const taprootScriptHex = deriveWalletTaprootScriptHex(wallet, networkKey);
+    const tapKey = (wallet.xOnlyHex || "").trim();
+    for (const entry of manualList) {
+      const txid = String(entry.txid || "").trim();
+      const vout = Number(entry.vout);
+      const value = Number(entry.value);
+      if (!/^[0-9a-fA-F]{64}$/.test(txid) || !Number.isInteger(vout) || vout < 0 || !Number.isFinite(value) || value <= 0) {
+        continue;
+      }
+      const manualUtxo = {
+        txid,
+        vout,
+        value,
+        scriptHex: taprootScriptHex,
+        address: wallet.p2tr,
+        confirmations: 1,
+        type: "p2tr",
+        tapInternalKeyHex: tapKey,
+      };
+      collected.push(manualUtxo);
+      hasTaproot = true;
+      changeAddress = wallet.p2tr || changeAddress;
+    }
+  }
+
+  if (!collected.length) {
+    return { inputs: collected, changeAddress, hasTaprootInputs: hasTaproot };
+  }
+
+  const unique = new Map();
+  for (const utxo of collected) {
+    const key = `${utxo.txid}:${utxo.vout}`;
+    if (!unique.has(key)) {
+      unique.set(key, utxo);
+    }
+  }
+
+  return { inputs: Array.from(unique.values()), changeAddress, hasTaprootInputs: hasTaproot };
+}
+
+function deriveWalletTaprootScriptHex(wallet, networkKey) {
+  const xOnly = String(wallet?.xOnlyHex || "").trim();
+  if (xOnly.length !== 64) {
+    throw new Error("Funding wallet missing x-only Taproot key");
+  }
+  const network = normalizeNetworkKey(networkKey) === "mainnet" ? bitcoin.networks.bitcoin : bitcoin.networks.testnet;
+  const payment = bitcoin.payments.p2tr({ internalPubkey: Buffer.from(xOnly, "hex"), network });
+  if (!payment.output) {
+    throw new Error("Unable to derive Taproot output script for wallet");
+  }
+  return Buffer.from(payment.output).toString("hex");
 }
 
 function deriveTaprootSigner({ wallet, network }) {
@@ -673,9 +872,13 @@ function deriveTaprootSigner({ wallet, network }) {
   if (tweakedInt === 0n) throw new Error("Invalid Taproot key tweak result");
 
   const tweakedBytes = bigIntToBuffer(tweakedInt);
-  const tweakedPair = ECPair.fromPrivateKey(tweakedBytes, { network });
-  tweakedPair.signSchnorr = (hash) => Buffer.from(nobleSchnorr.sign(hash, tweakedBytes));
-  return { signer: tweakedPair, outputKey: Buffer.from(outputKey) };
+  const prefix = parity ? 0x03 : 0x02;
+  const pubkey33 = Buffer.concat([Buffer.from([prefix]), Buffer.from(outputKey)]);
+  const signer = {
+    publicKey: pubkey33,
+    signSchnorr: (hash) => Buffer.from(nobleSchnorr.sign(hash, tweakedBytes)),
+  };
+  return { signer, outputKey: Buffer.from(outputKey) };
 }
 
 function getOutputKeyFromScript(script) {

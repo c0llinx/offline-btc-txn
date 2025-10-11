@@ -217,7 +217,11 @@ export default function WalletManager() {
 
   async function handleRefresh(wallet) {
     if (!wallet) return;
-    const addresses = [wallet.p2tr].filter(Boolean);
+    const addresses = (
+      Array.isArray(wallet.taprootAddresses) && wallet.taprootAddresses.length > 0
+        ? wallet.taprootAddresses
+        : [wallet.p2tr]
+    ).filter(Boolean);
     if (addresses.length === 0) {
       showToast("No address to refresh", "error");
       return;
@@ -229,22 +233,40 @@ export default function WalletManager() {
     setRefreshingId(wallet.id);
     try {
       let total = 0;
+      let pendingTotal = 0;
       for (const address of addresses) {
-        const res = await fetch(
-          `/api/balance/${encodeURIComponent(wallet.network)}/${encodeURIComponent(address)}`,
-        );
+        const params = new URLSearchParams({
+          address,
+          network: (wallet.network || "testnet4").toLowerCase(),
+        });
+        const res = await fetch(`/api/utxos?${params.toString()}`, {
+          headers: { "content-type": "application/json" },
+          cache: "no-store",
+        });
         if (!res.ok) {
           const payload = await res.json().catch(() => ({}));
-          throw new Error(payload.error || res.statusText || "Failed to load balance");
+          throw new Error(payload.error || res.statusText || "Failed to load UTXOs");
         }
         const data = await res.json();
-        total += data.balance || 0;
+        const utxos = Array.isArray(data.utxos) ? data.utxos : [];
+        const taprootUtxos = utxos.filter((utxo) =>
+          String(utxo.scriptHex || "").toLowerCase().startsWith("5120"),
+        );
+        const confirmed = taprootUtxos
+          .filter((utxo) => Number(utxo.confirmations || 0) > 0)
+          .reduce((sum, utxo) => sum + Number(utxo.value || 0), 0);
+        const pending = taprootUtxos
+          .filter((utxo) => Number(utxo.confirmations || 0) <= 0)
+          .reduce((sum, utxo) => sum + Number(utxo.value || 0), 0);
+        total += confirmed;
+        pendingTotal += pending;
       }
       setWalletBalance(
         wallet.id,
         total,
         `Synced via Refresh (${addresses.join(", ")})`,
         "sync",
+        { pendingSats: pendingTotal },
       );
       refreshFromStorage();
       showToast("Balance refreshed");
@@ -336,6 +358,16 @@ export default function WalletManager() {
                     )}
                     <div className="text-sm text-zinc-600 mt-1">
                       Balance: <span className="font-mono text-base">{formatSats(wallet.balanceSats)}</span>
+                      {typeof wallet.availableTaprootSats === "number" && wallet.availableTaprootSats !== wallet.balanceSats && (
+                        <span className="ml-2 text-xs text-zinc-500">
+                          Confirmed Taproot: {formatSats(wallet.availableTaprootSats)}
+                        </span>
+                      )}
+                      {typeof wallet.pendingDelta === "number" && wallet.pendingDelta > 0 && (
+                        <span className="ml-2 text-xs text-amber-600">
+                          Pending: {formatSats(wallet.pendingDelta)}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -433,22 +465,42 @@ export default function WalletManager() {
                   <div>
                     <dt className="text-zinc-500">Addresses</dt>
                     <dd className="space-y-1">
-                      <div>
-                        <div className="text-xs text-zinc-500">P2TR</div>
-                        <div className="font-mono break-all text-xs bg-zinc-100 dark:bg-zinc-800 rounded p-2">
-                          {wallet.p2tr || "—"}
-                        </div>
+                    <div>
+                      <div className="text-xs text-zinc-500">Taproot addresses</div>
+                      <div className="space-y-1">
+                        {(Array.isArray(wallet.taprootAddresses) && wallet.taprootAddresses.length > 0
+                          ? wallet.taprootAddresses
+                          : [wallet.p2tr || "—"]
+                        ).map((addr) => (
+                          <div
+                            key={addr}
+                            className="font-mono break-all text-xs bg-zinc-100 dark:bg-zinc-800 rounded p-2"
+                          >
+                            {addr || "—"}
+                          </div>
+                        ))}
                       </div>
+                    </div>
                     </dd>
                     <div className="flex gap-2 text-xs mt-2">
-                      {wallet.p2tr && (
+                      {Array.isArray(wallet.taprootAddresses) && wallet.taprootAddresses.length > 0 ? (
+                        wallet.taprootAddresses.map((addr) => (
+                          <button
+                            key={addr}
+                            className="text-blue-600 hover:underline"
+                            onClick={() => handleCopy(addr, "Taproot address")}
+                          >
+                            Copy {addr.slice(0, 6)}…
+                          </button>
+                        ))
+                      ) : wallet.p2tr ? (
                         <button
                           className="text-blue-600 hover:underline"
-                          onClick={() => handleCopy(wallet.p2tr, "P2TR address")}
+                          onClick={() => handleCopy(wallet.p2tr, "Taproot address")}
                         >
-                          Copy P2TR
+                          Copy Taproot
                         </button>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 </dl>

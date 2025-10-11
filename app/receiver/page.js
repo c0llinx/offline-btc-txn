@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { Buffer } from "buffer";
 import { decodeUR } from "@/lib/offline-core";
 import { parseClaimBundle } from "@/lib/offline-interop";
-import { loadWallets, getActiveWallet, recordWalletEvent } from "@/lib/wallets";
+import { loadWallets, getActiveWallet, recordWalletEvent, setWalletBalance } from "@/lib/wallets";
 import { copyToClipboard } from "@/lib/clipboard";
 import * as bitcoin from "bitcoinjs-lib";
 import * as ecc from "@bitcoinerlab/secp256k1";
@@ -18,6 +18,15 @@ const CameraScanner = dynamic(() => import("@/components/CameraScanner"), {
 });
 
 bitcoin.initEccLib(ecc);
+
+const BROADCAST_ENDPOINT_DEFAULTS = {
+  mainnet: "https://mempool.space",
+  testnet4: "https://mempool.space/testnet4",
+  testnet: "https://mempool.space/testnet",
+  signet: "https://mempool.space/signet",
+};
+
+const CUSTOM_DEST_OPTION = "__custom__";
 
 function ReceiverInner() {
   const [claimInput, setClaimInput] = useState("");
@@ -40,6 +49,8 @@ function ReceiverInner() {
   const [resultMsg, setResultMsg] = useState("");
   const [broadcastMsg, setBroadcastMsg] = useState("");
   const [building, setBuilding] = useState(false);
+  const [destinationSource, setDestinationSource] = useState(CUSTOM_DEST_OPTION);
+  const [allowAutoDestination, setAllowAutoDestination] = useState(true);
 
   useEffect(() => {
     const sync = () => {
@@ -64,6 +75,24 @@ function ReceiverInner() {
     if (activeWallet) return activeWallet;
     return wallets[0] || null;
   }, [wallets, selectedWalletId, activeWallet]);
+
+  const walletAddresses = useMemo(() => {
+    if (!selectedWallet) return [];
+    const rawList = [
+      selectedWallet.p2tr,
+      ...(Array.isArray(selectedWallet.taprootAddresses) ? selectedWallet.taprootAddresses : []),
+    ];
+    const unique = [];
+    for (const entry of rawList) {
+      const trimmed = typeof entry === "string" ? entry.trim() : "";
+      if (trimmed && isTaprootAddress(trimmed) && !unique.includes(trimmed)) {
+        unique.push(trimmed);
+      }
+    }
+    return unique;
+  }, [selectedWallet]);
+
+  const walletAddressesKey = useMemo(() => walletAddresses.join("|"), [walletAddresses]);
 
   useEffect(() => {
     if (!wallets.length) return;
@@ -90,6 +119,42 @@ function ReceiverInner() {
   }, [wallets, activeWallet, claimData?.claim_pubkey_hex]);
 
   useEffect(() => {
+    setAllowAutoDestination(true);
+  }, [selectedWallet?.id]);
+
+  useEffect(() => {
+    if (!selectedWallet) {
+      if (destinationSource !== CUSTOM_DEST_OPTION) setDestinationSource(CUSTOM_DEST_OPTION);
+      return;
+    }
+    if (!walletAddresses.length) {
+      if (destinationSource !== CUSTOM_DEST_OPTION) setDestinationSource(CUSTOM_DEST_OPTION);
+      return;
+    }
+    if (!allowAutoDestination) return;
+    if (destinationSource === CUSTOM_DEST_OPTION) {
+      if (!destinationAddress) {
+        const fallback = walletAddresses[0];
+        setDestinationSource(fallback);
+        setDestinationAddress(fallback);
+      }
+      return;
+    }
+    if (!walletAddresses.includes(destinationSource)) {
+      const fallback = walletAddresses[0];
+      setDestinationSource(fallback);
+      setDestinationAddress(fallback);
+    }
+  }, [
+    selectedWallet?.id,
+    walletAddressesKey,
+    destinationSource,
+    destinationAddress,
+    walletAddresses,
+    allowAutoDestination,
+  ]);
+
+  useEffect(() => {
     if (!claimData) return;
     const amount = Number(claimData.send_value_sat || 0);
     if (amount > 0) setDestAmount(amount);
@@ -97,9 +162,24 @@ function ReceiverInner() {
 
   useEffect(() => {
     if (!selectedWallet) return;
-    const candidate = selectedWallet.p2tr || "";
-    setDestinationAddress(candidate);
-  }, [selectedWallet?.id, selectedWallet?.p2tr]);
+    if (!claimData?.requires_signature) return;
+    if (!allowAutoDestination) return;
+    const firstAddress = walletAddresses[0];
+    if (!firstAddress) return;
+    setDestinationAddress((prev) => prev || firstAddress);
+    setDestinationSource((prev) => {
+      if (prev === CUSTOM_DEST_OPTION || !walletAddresses.includes(prev)) {
+        return firstAddress;
+      }
+      return prev;
+    });
+  }, [
+    selectedWallet?.id,
+    walletAddressesKey,
+    claimData?.requires_signature,
+    walletAddresses,
+    allowAutoDestination,
+  ]);
 
   async function handleDecodeBundle() {
     setClaimErr("");
@@ -121,7 +201,8 @@ function ReceiverInner() {
       let fundingScriptHex = bufferToHex(parsed.funding_script || parsed.script);
       const memo = parsed.meta?.memo || "";
       const fundTxRawHex = bufferToHex(parsed.fund_tx || parsed.funding_tx || null);
-      const networkKey = String(parsed.network || parsed.meta?.network || "").toLowerCase();
+      const rawNetworkKey = String(parsed.network || parsed.meta?.network || "").toLowerCase();
+      const normalizedNetwork = normalizeNetworkKey(rawNetworkKey);
       const endpointFromBundle = String(parsed.broadcast_endpoint || parsed.meta?.broadcast_endpoint || "").trim();
       let voutIndex = Number(parsed.vout ?? 0) >>> 0;
       let prevValue = Number(parsed.value ?? parsed.send_value_sat ?? 0) >>> 0;
@@ -155,9 +236,14 @@ function ReceiverInner() {
           const fallbackOut = tx.outs[voutIndex];
           prevValue = Number(fallbackOut?.value ?? 0) >>> 0;
         }
-        const endpoint = endpointFromBundle || defaultBroadcastEndpoint(networkKey);
+        const endpoint = endpointFromBundle || defaultBroadcastEndpoint(normalizedNetwork);
         try {
-          const broadcastResult = await broadcastFundingTransaction(fundTxRawHex, endpoint, finalTxidHex);
+          const broadcastResult = await broadcastRawTransaction(
+            fundTxRawHex,
+            endpoint,
+            finalTxidHex,
+            normalizedNetwork,
+          );
           finalTxidHex = broadcastResult.txid || finalTxidHex;
           setBroadcastMsg(
             broadcastResult.alreadyKnown
@@ -179,8 +265,8 @@ function ReceiverInner() {
         funding_script_hex: fundingScriptHex,
         memo,
         claim_pubkey_hex: claimPubKeyHex,
-        broadcast_endpoint: endpointFromBundle || (fundTxRawHex ? defaultBroadcastEndpoint(networkKey) : ""),
-        network: networkKey || parsed.network || parsed.meta?.network || "",
+        broadcast_endpoint: endpointFromBundle || defaultBroadcastEndpoint(normalizedNetwork),
+        network: normalizedNetwork,
         requires_signature: requiresSignature,
       };
       setClaimData(claimDetails);
@@ -192,6 +278,21 @@ function ReceiverInner() {
       setResultMsg("");
       setSignedHex("");
       setPsbtBase64("");
+      if (requiresSignature && walletAddresses.length) {
+        const fallbackAddress = destinationAddress && walletAddresses.includes(destinationAddress)
+          ? destinationAddress
+          : walletAddresses[0];
+        setAllowAutoDestination(true);
+        setDestinationSource(fallbackAddress);
+        setDestinationAddress(fallbackAddress);
+      } else {
+        setAllowAutoDestination(false);
+        setDestinationSource(CUSTOM_DEST_OPTION);
+        setDestinationAddress((prev) => {
+          const existing = prev?.trim();
+          return existing || "";
+        });
+      }
       if (!finalTxidHex && !fundTxRawHex) {
         setBroadcastMsg("Funding transaction not embedded. Enter the txid and output info once it is broadcast.");
       }
@@ -204,20 +305,22 @@ function ReceiverInner() {
     setClaimErr("");
     setResultMsg("");
     setSignedHex("");
-      setPsbtBase64("");
-      if (building) return;
-      try {
-        setBuilding(true);
-        if (!claimData) throw new Error("Decode a claim bundle first");
-        if (!selectedWallet) throw new Error("Select a wallet to sign with");
-        const claimPubKeyHex = String(claimData.claim_pubkey_hex || "").trim().toLowerCase();
-        const requiresSignature = Boolean(claimData.requires_signature);
-        const txid = (fundTxId || claimData.fund_txid_hex || "").trim();
-        if (!/^[0-9a-fA-F]{64}$/.test(txid)) {
-          throw new Error(
-            "Funding txid required. Paste the broadcast transaction id (64 hex) into the Funding txid field before signing.",
-          );
-        }
+    setPsbtBase64("");
+    if (building) return;
+    let broadcastAttempted = false;
+    try {
+      setBuilding(true);
+      if (!claimData) throw new Error("Decode a claim bundle first");
+      if (!selectedWallet) throw new Error("Select a wallet to sign with");
+      const claimNetworkKey = normalizeNetworkKey(claimData.network || selectedWallet.network || "testnet4");
+      const claimPubKeyHex = String(claimData.claim_pubkey_hex || "").trim().toLowerCase();
+      const requiresSignature = Boolean(claimData.requires_signature);
+      const txid = (fundTxId || claimData.fund_txid_hex || "").trim();
+      if (!/^[0-9a-fA-F]{64}$/.test(txid)) {
+        throw new Error(
+          "Funding txid required. Paste the broadcast transaction id (64 hex) into the Funding txid field before signing.",
+        );
+      }
       const vout = Number(
         (Number.isFinite(fundVout) ? fundVout : null) ?? claimData.vout ?? 0,
       ) >>> 0;
@@ -247,10 +350,10 @@ function ReceiverInner() {
       ).trim();
       if (!scriptHex) throw new Error("Claim bundle missing funding script");
       const script = Buffer.from(scriptHex, "hex");
-      const network = selectedWallet.network === "mainnet"
+      const networkParams = claimNetworkKey === "mainnet"
         ? bitcoin.networks.bitcoin
         : bitcoin.networks.testnet;
-      const psbt = new bitcoin.Psbt({ network });
+      const psbt = new bitcoin.Psbt({ network: networkParams });
       const leafScript = {
         leafVersion: (claimData.leaf_ver ?? 0xc0) >>> 0,
         script: Buffer.from(claimData.script),
@@ -281,7 +384,7 @@ function ReceiverInner() {
         const signerKey = resolveClaimSigningKey({
           selectedWallet,
           claimPubKeyHex,
-          network,
+          network: networkParams,
         });
         const signer = {
           publicKey: Buffer.from(ecc.pointFromScalar(signerKey, true)),
@@ -306,29 +409,68 @@ function ReceiverInner() {
       }
       psbt.updateInput(0, { finalScriptWitness: finalWitness });
 
-      const rawHex = psbt.extractTransaction().toHex();
+      const finalTx = psbt.extractTransaction();
+      const rawHex = finalTx.toHex();
       const psbtB64 = psbt.toBase64();
+      const claimTxid = finalTx.getId();
       setSignedHex(rawHex);
       setPsbtBase64(psbtB64);
-      const actionVerb = requiresSignature ? "signed" : "prepared";
-      const finalMessage = adjustmentNote
-        ? `${adjustmentNote} Claim transaction ${actionVerb}. Broadcast using the Watch page or your node.`
-        : `Claim transaction ${actionVerb}. Broadcast using the Watch page or your node.`;
-      setResultMsg(finalMessage);
-
-      recordWalletEvent({
-        walletId: selectedWallet.id,
-        type: "receive",
-        amountSats: payoutValue,
-        description: `Claimed funds from ${txid}`,
-        relatedAddress: payoutAddress,
-        source: "workflow",
+      const normalizedTarget = payoutAddress.toLowerCase();
+      const paysTarget = finalTx.outs.some((out) => {
+        try {
+          const derived = bitcoin.address.fromOutputScript(out.script, networkParams);
+          return String(derived || "").toLowerCase() === normalizedTarget;
+        } catch {
+          return false;
+        }
       });
+      if (!paysTarget) {
+        throw new Error("Claim transaction build failed: destination address missing from outputs");
+      }
+
+      const broadcastEndpoint = defaultBroadcastEndpoint(claimNetworkKey);
+      broadcastAttempted = true;
+      const broadcastResult = await broadcastRawTransaction(
+        rawHex,
+        broadcastEndpoint,
+        claimTxid,
+        claimNetworkKey,
+      );
+      const broadcastTxid = broadcastResult.txid || claimTxid;
+      const broadcastSummary = broadcastResult.alreadyKnown
+        ? `Claim transaction already known (${broadcastTxid}).`
+        : `Claim transaction broadcasted (${broadcastTxid}).`;
+      setBroadcastMsg(broadcastSummary);
+      const messageParts = [];
+      if (adjustmentNote) messageParts.push(adjustmentNote);
+      messageParts.push(broadcastSummary);
+      messageParts.push("Pending balances display until the spend confirms on-chain.");
+      setResultMsg(messageParts.join(" "));
+
+      const creditWallet = findWalletByAddress(wallets, payoutAddress) || selectedWallet;
+      if (creditWallet?.id) {
+        recordWalletEvent({
+          walletId: creditWallet.id,
+          type: "receive",
+          amountSats: payoutValue,
+          description: `Claimed funds via ${broadcastTxid}`,
+          relatedAddress: payoutAddress,
+          source: "workflow",
+        });
+        await syncTaprootBalance(creditWallet, payoutAddress);
+      }
       const nextWallets = loadWallets();
       setWallets(nextWallets);
       setActiveWalletState(getActiveWallet() || nextWallets[0] || null);
     } catch (error) {
-      setClaimErr(error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      setClaimErr(message);
+      if (broadcastAttempted) {
+        setResultMsg(`Claim transaction prepared but broadcast failed: ${message}`);
+      } else {
+        setResultMsg("");
+      }
+      setBroadcastMsg("");
     } finally {
       setBuilding(false);
     }
@@ -426,18 +568,51 @@ function ReceiverInner() {
           placeholder="Exact secret text or hex"
         />
       </label>
-          <label className="space-y-1">
-            <div className="text-sm text-zinc-500">Destination address</div>
+          <div className="space-y-2">
+            <label className="space-y-1 block">
+              <div className="text-sm text-zinc-500">Destination address</div>
+              <select
+                className="w-full rounded border px-3 py-2"
+                value={destinationSource}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setClaimErr("");
+                  if (value === CUSTOM_DEST_OPTION) {
+                    setDestinationSource(CUSTOM_DEST_OPTION);
+                    setAllowAutoDestination(false);
+                    return;
+                  }
+                  setAllowAutoDestination(true);
+                  setDestinationSource(value);
+                  setDestinationAddress(value);
+                }}
+              >
+                {walletAddresses.map((addr) => (
+                  <option key={addr} value={addr}>
+                    {formatAddressLabel(addr)}
+                  </option>
+                ))}
+                <option value={CUSTOM_DEST_OPTION}>Custom address…</option>
+              </select>
+            </label>
             <input
               className="w-full rounded border px-3 py-2"
               value={destinationAddress}
               onChange={(event) => {
+                if (destinationSource !== CUSTOM_DEST_OPTION) return;
+                setAllowAutoDestination(false);
                 setDestinationAddress(event.target.value);
                 setClaimErr("");
               }}
               placeholder="tb1..."
+              readOnly={destinationSource !== CUSTOM_DEST_OPTION}
             />
-          </label>
+            {destinationSource !== CUSTOM_DEST_OPTION ? (
+              <div className="text-xs text-zinc-500">Using wallet address selected above. Choose “Custom address…” to paste an external one.</div>
+            ) : (
+              <div className="text-xs text-zinc-500">Paste any valid Taproot address.</div>
+            )}
+          </div>
           <label className="space-y-1">
             <div className="text-sm text-zinc-500">Destination amount (sats)</div>
             <input
@@ -585,22 +760,12 @@ export default function ReceiverPage() {
   );
 }
 
-const BROADCAST_DEFAULT_ENDPOINTS = {
-  mainnet: "https://mempool.space",
-  testnet4: "https://mempool.space/testnet4",
-  signet: "https://mempool.space/signet",
-  testnet: "https://mempool.space/testnet",
-};
-
-function defaultBroadcastEndpoint(networkKey) {
-  const key = String(networkKey || "").toLowerCase();
-  return BROADCAST_DEFAULT_ENDPOINTS[key] || BROADCAST_DEFAULT_ENDPOINTS.testnet4;
-}
-
-async function broadcastFundingTransaction(rawHex, endpoint, fallbackTxid) {
+async function broadcastRawTransaction(rawHex, endpoint, fallbackTxid, networkKey) {
+  const normalizedNetwork = normalizeNetworkKey(networkKey);
   const payload = {
     hex: rawHex,
-    endpoint: endpoint || undefined,
+    endpoint: endpoint || defaultBroadcastEndpoint(normalizedNetwork),
+    network: normalizedNetwork,
   };
   const resp = await fetch("/api/broadcast", {
     method: "POST",
@@ -631,6 +796,104 @@ function looksLikeAlreadyBroadcast(message) {
     lower.includes("transaction already exists") ||
     lower.includes("already in mempool")
   );
+}
+
+async function syncTaprootBalance(wallet, preferredAddress) {
+  try {
+    if (!wallet?.id) return;
+    const networkKey = normalizeNetworkKey(wallet?.network || "testnet4");
+    const addressList = Array.isArray(wallet?.taprootAddresses)
+      ? wallet.taprootAddresses
+      : [];
+    const uniqueAddresses = Array.from(
+      new Set(
+        [wallet.p2tr, preferredAddress, ...addressList]
+          .map((addr) => (typeof addr === "string" ? addr.trim() : ""))
+          .filter((addr) => addr && /^(bc1p|tb1p|bcrt1p)/i.test(addr)),
+      ),
+    );
+    if (uniqueAddresses.length === 0) return;
+    let totalConfirmed = 0;
+    let totalPending = 0;
+    const queried = [];
+    for (const address of uniqueAddresses) {
+      try {
+        const params = new URLSearchParams({
+          address,
+          network: networkKey,
+        });
+        const res = await fetch(`/api/utxos?${params.toString()}`, {
+          headers: { "content-type": "application/json" },
+          cache: "no-store",
+        });
+        if (!res.ok) continue;
+        const data = await res.json().catch(() => null);
+        if (!data?.utxos) continue;
+        const confirmed = data.utxos
+          .filter((utxo) => String(utxo.scriptHex || "").toLowerCase().startsWith("5120"))
+          .filter((utxo) => Number(utxo.confirmations || 0) > 0)
+          .reduce((sum, utxo) => sum + Number(utxo.value || 0), 0);
+        const pending = data.utxos
+          .filter((utxo) => String(utxo.scriptHex || "").toLowerCase().startsWith("5120"))
+          .filter((utxo) => Number(utxo.confirmations || 0) <= 0)
+          .reduce((sum, utxo) => sum + Number(utxo.value || 0), 0);
+        totalConfirmed += confirmed;
+        totalPending += pending;
+        queried.push(address);
+      } catch (error) {
+        console.warn("taproot balance sub-sync failed", address, error);
+      }
+    }
+    if (!queried.length) return;
+    setWalletBalance(
+      wallet.id,
+      totalConfirmed,
+      `Synced via Refresh (${queried.join(", ")})`,
+      "sync",
+      { pendingSats: totalPending },
+    );
+  } catch (error) {
+    console.warn("auto taproot balance sync failed", error);
+  }
+}
+
+function normalizeNetworkKey(networkKey) {
+  const key = String(networkKey || "").toLowerCase();
+  if (key === "mainnet") return "mainnet";
+  if (key === "testnet") return "testnet";
+  if (key === "signet") return "signet";
+  if (key === "testnet4") return "testnet4";
+  return "testnet4";
+}
+
+function defaultBroadcastEndpoint(networkKey) {
+  const key = normalizeNetworkKey(networkKey);
+  return BROADCAST_ENDPOINT_DEFAULTS[key] || BROADCAST_ENDPOINT_DEFAULTS.testnet4;
+}
+
+function findWalletByAddress(walletsList, address) {
+  if (!Array.isArray(walletsList) || !address) return null;
+  const target = address.trim().toLowerCase();
+  if (!target) return null;
+  for (const wallet of walletsList) {
+    if (!wallet) continue;
+    const known = [
+      wallet.p2tr,
+      ...(Array.isArray(wallet.taprootAddresses) ? wallet.taprootAddresses : []),
+    ]
+      .map((addr) => (typeof addr === "string" ? addr.trim().toLowerCase() : ""))
+      .filter(Boolean);
+    if (known.includes(target)) {
+      return wallet;
+    }
+  }
+  return null;
+}
+
+function formatAddressLabel(address = "") {
+  const trimmed = address.trim();
+  if (trimmed.length <= 18) return trimmed;
+  return `${trimmed.slice(0, 10)}…${trimmed.slice(-6)}`;
 }
 
 function toUint8Array(x) {
