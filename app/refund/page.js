@@ -8,7 +8,7 @@ import { ECPairFactory } from "ecpair";
 import { schnorr as nobleSchnorr } from "@noble/curves/secp256k1";
 import { decodeUR } from "@/lib/offline-core";
 
-function SignerContent() {
+function RefundContent() {
   const searchParams = useSearchParams();
 
   const [networkKey, setNetworkKey] = useState("testnet4");
@@ -18,7 +18,7 @@ function SignerContent() {
   const [psbtBuf, setPsbtBuf] = useState(null);
   const [inputIndex, setInputIndex] = useState(0);
   const [preimageInput, setPreimageInput] = useState("");
-  const [rPrivInput, setRPrivInput] = useState("");
+  const [signerPrivInput, setSignerPrivInput] = useState("");
   const [signErr, setSignErr] = useState("");
   const [signedHex, setSignedHex] = useState("");
 
@@ -170,7 +170,7 @@ function SignerContent() {
 
       // R private key: accept 32-byte hex or WIF
       let seckey;
-      const hexPriv = parseMaybeHex(rPrivInput);
+      const hexPriv = parseMaybeHex(signerPrivInput);
       if (hexPriv) {
         if (hexPriv.length !== 32)
           throw new Error("Hex private key must be 32 bytes (64 hex chars)");
@@ -178,7 +178,7 @@ function SignerContent() {
       } else {
         try {
           const ECPair = ECPairFactory(ecc);
-          const kp = ECPair.fromWIF(rPrivInput.trim(), network);
+          const kp = ECPair.fromWIF(signerPrivInput.trim(), network);
           if (!kp?.privateKey) throw new Error("Invalid WIF");
           seckey = Buffer.from(kp.privateKey);
         } catch (e) {
@@ -227,15 +227,12 @@ function SignerContent() {
 
   return (
     <main className="space-y-6">
-      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-600 text-white">
-        SIGNER
+      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-600 text-white">
+        REFUND
       </div>
-      <h1 className="text-2xl font-semibold">
-        Claim Finalization (Offline Signer)
-      </h1>
+      <h1 className="text-2xl font-semibold">Refund Finalization (Offline)</h1>
       <p className="text-zinc-500">
-        Import the Claim PSBT, provide the preimage x and the R private key to
-        produce a fully signed transaction.
+        Import the refund PSBT, provide the original preimage and your funding wallet key to produce the final refund transaction.
       </p>
 
       <section className="rounded-lg border p-4 space-y-3">
@@ -282,7 +279,7 @@ function SignerContent() {
       </section>
 
       <section className="rounded-lg border p-4 space-y-3">
-        <h2 className="font-medium">Sign Claim</h2>
+        <h2 className="font-medium">Sign Refund Spend</h2>
         <div className="grid md:grid-cols-2 gap-3">
           <label className="space-y-1">
             <div className="text-sm text-zinc-500">Input index</div>
@@ -306,12 +303,12 @@ function SignerContent() {
           </label>
           <label className="space-y-1 md:col-span-2">
             <div className="text-sm text-zinc-500">
-              R Private Key (WIF or 32-byte hex)
+              Funding private key (WIF or 32-byte hex)
             </div>
             <input
               className="w-full rounded border px-3 py-2 font-mono"
-              value={rPrivInput}
-              onChange={(e) => setRPrivInput(e.target.value)}
+              value={signerPrivInput}
+              onChange={(e) => setSignerPrivInput(e.target.value)}
               placeholder="WIF (c.../L.../K...) or 64 hex chars"
             />
             <div className="text-xs text-zinc-500">
@@ -324,7 +321,7 @@ function SignerContent() {
             onClick={handleSign}
             className="px-3 py-2 rounded bg-emerald-600 text-white"
           >
-            Sign Claim
+            Sign Refund
           </button>
           {!!signErr && <div className="text-sm text-red-600">{signErr}</div>}
         </div>
@@ -337,8 +334,7 @@ function SignerContent() {
               value={signedHex}
             />
             <div className="text-xs text-zinc-500">
-          Broadcast this on testnet4 using your broadcaster. On this
-              project, use the Watch page's broadcast or your node.
+              Broadcast this on testnet4 using your broadcaster. On this project, use the Watch page's broadcast or your node.
             </div>
           </div>
         )}
@@ -347,10 +343,10 @@ function SignerContent() {
   );
 }
 
-export default function Signer() {
+export default function Refund() {
   return (
     <Suspense fallback={<div>Loading...</div>}>
-      <SignerContent />
+      <RefundContent />
     </Suspense>
   );
 }

@@ -5,7 +5,7 @@ A Next.js interface for building and working with offline-friendly Bitcoin Tapro
 ## Features
 
 - **Cold workflow tools** for creating claim/refund Taproot addresses, funding PSBTs, and QR-ready UR fragments.
-- **Signer and Receiver assistants** that deserialize UR payloads, guide through claim bundle parsing, and help compose broadcast-ready PSBTs.
+- **Refund and Receiver assistants** that deserialize UR payloads, guide through claim bundle parsing, and help compose broadcast-ready PSBTs.
 - **Wallet Manager** to generate/import WIFs, cache pubkeys/addresses locally, and reuse them across every workflow.
 - **On-device balance tracking** with per-wallet history and a network-backed “Refresh” sync when you’re online.
 - **Testnet helpers** including API routes that proxy mempool.space/testnet4 for raw transaction and UTXO lookups.

@@ -11,6 +11,7 @@ export default function Home() {
         <Link className="rounded-2xl p-6 border hover:shadow-md" href="/cold">Cold Mode</Link>
         <Link className="rounded-2xl p-6 border hover:shadow-md" href="/watch">Watch‑Only</Link>
         <Link className="rounded-2xl p-6 border hover:shadow-md" href="/receiver">Receiver</Link>
+        <Link className="rounded-2xl p-6 border hover:shadow-md" href="/refund">Refund</Link>
       </div>
     </main>
   );

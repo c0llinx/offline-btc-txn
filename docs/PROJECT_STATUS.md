@@ -9,7 +9,7 @@ This document captures the current state of the codebase and the major changes t
 ## Application Overview
 
 - **Stack**: Next.js 14 (app router), React 18, TailwindCSS, bitcoinjs-lib (Taproot), QRCode (renderer), `@bitcoinerlab/secp256k1`, `ecpair`.
-- **Structure**: Single Next.js project (no monorepo). Core UI routes live under `app/`: `cold/`, `receiver/`, `signer/`, `tools/address/`, `wallets/`, etc.
+- **Structure**: Single Next.js project (no monorepo). Core UI routes live under `app/`: `cold/`, `receiver/`, `refund/`, `tools/address/`, `wallets/`, etc.
 - **Wallet storage**: `lib/wallets.js` handles browser-local wallets (Taproot-only). It stores WIF, compressed + x-only pubkeys, Taproot address, balance history.
 
 ---
@@ -32,6 +32,11 @@ This document captures the current state of the codebase and the major changes t
 - Requires user to provide funding txid/vout/script/value if the bundle does not include them yet.
 - Builds and signs the claim spend, adjusting payout for fees; skips signature when bundle indicates no Taproot key signature is required.
 - Provides copy buttons for signed tx hex; updates local wallet history with the receive entry.
+
+### Refund (`app/refund/page.js`)
+- Offline assistant for finalising refund PSBTs produced by Cold mode.
+- Accepts UR/base64 PSBTs, exposes the Taproot input index, and signs using the funding wallet key + original preimage.
+- Outputs the fully-signed refund transaction hex for broadcasting once the claim window expires.
 
 ### Wallet Manager (`app/wallets/page.js` + `components/WalletManager.jsx`)
 - Taproot-only wallets (P2WPKH generation & display removed).
@@ -80,6 +85,9 @@ This document captures the current state of the codebase and the major changes t
 - Destination picker now lists the active wallet’s Taproot addresses with a custom option so operators can paste an external payout without retyping known keys.
 - Broadcasts respect the claim bundle or wallet network (mainnet / testnet / testnet4 / signet) and fall back between the two public test networks when needed so legacy coins remain spendable.
 - Watch mode now lets you pick the target network while keeping the endpoint read-only for clarity.
+
+### Refund Assistant
+- Replaced the legacy signer view with a dedicated refund helper that imports PSBTs, applies the original preimage + sender key, and outputs a final refund transaction for broadcast after expiry.
 
 ### Clipboard & Sharing
 - Introduced shared clipboard helper.

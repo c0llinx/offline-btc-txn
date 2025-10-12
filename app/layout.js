@@ -26,8 +26,8 @@ export default function RootLayout({ children }) {
               <Link href="/receiver" className="hover:text-zinc-900 dark:hover:text-zinc-50">
                 Receiver
               </Link>
-              <Link href="/signer" className="hover:text-zinc-900 dark:hover:text-zinc-50">
-                Signer
+              <Link href="/refund" className="hover:text-zinc-900 dark:hover:text-zinc-50">
+                Refund
               </Link>
             </div>
           </header>
