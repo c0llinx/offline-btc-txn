@@ -123,7 +123,7 @@ This document captures the current state of the codebase and the major changes t
 
 ## How to Continue
 
-1. Pull latest main/feature branch.
+1. Pull latest branch: `feature/simplify-and-modularize`
 2. Run `npm install` (regenerates `package-lock.json` with `ecpair`).
 3. Use `npm run dev` locally.
 4. For production deploys (Render), ensure updated build/start commands and Node version.

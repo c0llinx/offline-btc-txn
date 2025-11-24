@@ -1,5 +1,5 @@
 Product Requirements Document: Offline Bitcoin Transactions
-Author: George Akor
+Author: George Akor, Collins Okafor, Josiah Isong.
 Location: Gumi-si, Gyeongsangbuk-do
 Date: June 24, 2025
 Status: Version 1.0 - Draft
@@ -88,4 +88,3 @@ So that my funds are not permanently lost.
 1. Support for other air-gap data transfer methods (e.g., NFC, Bluetooth, microSD card).
 2. Multi-signature offline transactions.
 3. Offline transactions for other cryptocurrencies (e.g., Liquid Bitcoin).
-4. A fully integrated "messenger" app that automates the broadcasting without requiring a third-party wallet or block explorer.
