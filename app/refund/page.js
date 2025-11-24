@@ -21,6 +21,11 @@ function RefundContent() {
   const [signerPrivInput, setSignerPrivInput] = useState("");
   const [signErr, setSignErr] = useState("");
   const [signedHex, setSignedHex] = useState("");
+  const [feeRate, setFeeRate] = useState(2);
+  const [feeInfo, setFeeInfo] = useState(null);
+  const [expiryHeight, setExpiryHeight] = useState(null);
+  const [currentHeight, setCurrentHeight] = useState(null);
+  const [heightCheckErr, setHeightCheckErr] = useState("");
 
   const network = useMemo(() => {
     if (networkKey === "mainnet") return bitcoin.networks.bitcoin;
@@ -31,6 +36,9 @@ function RefundContent() {
     setImportErr("");
     setPsbtInfo(null);
     setPsbtBuf(null);
+    setExpiryHeight(null);
+    setCurrentHeight(null);
+    setHeightCheckErr("");
     try {
       const text = (psbtInput || "").trim();
       if (!text) throw new Error("Paste a PSBT (base64) or UR parts");
@@ -58,6 +66,27 @@ function RefundContent() {
         setImportErr("PSBT is missing tapLeafScript");
       }
       console.log(JSON.stringify(psbt.data.inputs, null, 2));
+
+      // Extract locktime (expiry height)
+      const locktime = psbt.locktime || psbt.data.globalMap?.unsignedTx?.tx?.locktime || 0;
+      if (locktime > 0) {
+        setExpiryHeight(locktime);
+
+        // Fetch current block height
+        try {
+          const endpoint = networkKey === "mainnet"
+            ? "https://mempool.space"
+            : `https://mempool.space/${networkKey}`;
+          const response = await fetch(`${endpoint}/api/blocks/tip/height`);
+          if (response.ok) {
+            const height = await response.text();
+            setCurrentHeight(Number(height));
+          }
+        } catch (err) {
+          setHeightCheckErr("Unable to fetch current block height. Proceed with caution.");
+        }
+      }
+
       setPsbtBuf(buf);
       setPsbtInfo({
         inputs: psbt.inputCount,
@@ -69,7 +98,7 @@ function RefundContent() {
     } catch (e) {
       setImportErr(String(e?.message || e));
     }
-  }, [psbtInput, network]);
+  }, [psbtInput, network, networkKey]);
 
   useEffect(() => {
     const psbtFromQuery = searchParams.get("psbt");
@@ -150,17 +179,60 @@ function RefundContent() {
     return Buffer.from(out);
   }
 
+  function estimateVsize(outputCount = 1) {
+    // Taproot script-path spend estimate
+    // Base: ~110 bytes + witness data (~150 bytes for script path) + outputs
+    return 140 + outputCount * 43;
+  }
+
   async function handleSign() {
     setSignErr("");
     setSignedHex("");
+    setFeeInfo(null);
     try {
       if (!psbtBuf) throw new Error("Import a PSBT first");
+
+      // Validate timelock
+      if (expiryHeight && currentHeight) {
+        if (currentHeight < expiryHeight) {
+          const blocksRemaining = expiryHeight - currentHeight;
+          throw new Error(
+            `Timelock not yet reached. Current height: ${currentHeight}, Expiry: ${expiryHeight}. ` +
+            `Wait ${blocksRemaining} more block${blocksRemaining !== 1 ? 's' : ''} (~${Math.ceil(blocksRemaining * 10)} minutes).`
+          );
+        }
+      }
+
       const psbt = bitcoin.Psbt.fromBuffer(psbtBuf, { network });
       const idx = Number(inputIndex) >>> 0;
       if (idx >= psbt.inputCount) throw new Error("Input index out of range");
       const inp = psbt.data.inputs[idx];
       if (!inp.tapLeafScript || inp.tapLeafScript.length === 0)
         throw new Error("PSBT missing tapLeafScript for input");
+
+      // Calculate fee and adjust output
+      const feeRateSatVb = Math.max(1, Math.trunc(Number(feeRate) || 1));
+      const estimatedFee = Math.ceil(estimateVsize(1) * feeRateSatVb);
+
+      const inputValue = inp.witnessUtxo?.value || 0;
+      if (!inputValue) throw new Error("PSBT input missing value");
+
+      const adjustedOutputValue = inputValue - estimatedFee;
+      if (adjustedOutputValue <= 546) {
+        throw new Error(`Fee too high. Input: ${inputValue} sats, Fee: ${estimatedFee} sats. Output would be below dust limit (546 sats).`);
+      }
+
+      // Update the output value to account for fees
+      if (psbt.txOutputs && psbt.txOutputs.length > 0) {
+        const originalValue = psbt.txOutputs[0].value;
+        psbt.updateOutput(0, { value: adjustedOutputValue });
+        setFeeInfo({
+          original: originalValue,
+          adjusted: adjustedOutputValue,
+          fee: estimatedFee,
+          feeRate: feeRateSatVb,
+        });
+      }
       // Prepare private key for R
       // Preimage: accept hex (any length) or text (UTF-8)
       let xBytes = parseMaybeHex(preimageInput);
@@ -272,15 +344,63 @@ function RefundContent() {
           )}
         </div>
         {psbtInfo && (
-          <div className="text-sm text-zinc-600">
-            Inputs: {psbtInfo.inputs} · Outputs: {psbtInfo.outputs}
+          <div className="space-y-2">
+            <div className="text-sm text-zinc-600">
+              Inputs: {psbtInfo.inputs} · Outputs: {psbtInfo.outputs}
+            </div>
+            {expiryHeight && (
+              <div className="rounded border p-3 space-y-1">
+                <div className="text-sm font-medium">Timelock Status</div>
+                <div className="text-sm text-zinc-600">
+                  Expiry Height: <span className="font-mono">{expiryHeight}</span>
+                </div>
+                {currentHeight && (
+                  <>
+                    <div className="text-sm text-zinc-600">
+                      Current Height: <span className="font-mono">{currentHeight}</span>
+                    </div>
+                    {currentHeight >= expiryHeight ? (
+                      <div className="text-sm text-green-600 font-medium">
+                        ✓ Timelock reached - ready to sign
+                      </div>
+                    ) : (
+                      <div className="text-sm text-amber-600 font-medium">
+                        ⚠ Timelock NOT reached - wait {expiryHeight - currentHeight} more blocks
+                        (~{Math.ceil((expiryHeight - currentHeight) * 10)} minutes)
+                      </div>
+                    )}
+                  </>
+                )}
+                {heightCheckErr && (
+                  <div className="text-sm text-amber-600">{heightCheckErr}</div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </section>
 
       <section className="rounded-lg border p-4 space-y-3">
-        <h2 className="font-medium">Sign Refund Spend</h2>
+        <h2 className="font-medium">Fees & Signing</h2>
         <div className="grid md:grid-cols-2 gap-3">
+          <label className="space-y-1">
+            <div className="text-sm text-zinc-500">Fee rate (sat/vB)</div>
+            <input
+              type="number"
+              className="w-full rounded border px-3 py-2"
+              value={feeRate}
+              min={1}
+              step={1}
+              onChange={(e) => setFeeRate(Number(e.target.value) || 1)}
+              onWheel={(e) => e.currentTarget.blur()}
+              onKeyDown={(e) => {
+                if (["-", "e", "E", "+"].includes(e.key)) e.preventDefault();
+              }}
+            />
+            <div className="text-xs text-zinc-500">
+              Estimated fee: ~{Math.ceil(estimateVsize(1) * feeRate)} sats
+            </div>
+          </label>
           <label className="space-y-1">
             <div className="text-sm text-zinc-500">Input index</div>
             <input
@@ -301,7 +421,7 @@ function RefundContent() {
               placeholder="hex (even length) or free text"
             />
           </label>
-          <label className="space-y-1 md:col-span-2">
+          <label className="space-y-1">
             <div className="text-sm text-zinc-500">
               Funding private key (WIF or 32-byte hex)
             </div>
@@ -325,6 +445,16 @@ function RefundContent() {
           </button>
           {!!signErr && <div className="text-sm text-red-600">{signErr}</div>}
         </div>
+        {!!feeInfo && (
+          <div className="rounded bg-blue-50 border border-blue-200 p-3 text-sm">
+            <div className="font-medium text-blue-900 mb-1">Fee Adjustment</div>
+            <div className="text-blue-800 space-y-1">
+              <div>Original output: {feeInfo.original} sats</div>
+              <div>Adjusted output: {feeInfo.adjusted} sats</div>
+              <div>Fee: {feeInfo.fee} sats ({feeInfo.feeRate} sat/vB)</div>
+            </div>
+          </div>
+        )}
         {!!signedHex && (
           <div className="text-sm space-y-1">
             <div className="text-zinc-500">Signed transaction (hex)</div>
@@ -334,7 +464,7 @@ function RefundContent() {
               value={signedHex}
             />
             <div className="text-xs text-zinc-500">
-              Broadcast this on testnet4 using your broadcaster. On this project, use the Watch page's broadcast or your node.
+              Broadcast this on {networkKey} using your broadcaster. On this project, use the Watch page's broadcast or your node.
             </div>
           </div>
         )}

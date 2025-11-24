@@ -43,6 +43,9 @@ export default function Cold() {
   const [fundingRaw, setFundingRaw] = useState("");
   const [broadcastEndpoint, setBroadcastEndpoint] = useState("");
   const [manualUtxos, setManualUtxos] = useState([]);
+  const [refundPsbtBase64, setRefundPsbtBase64] = useState("");
+  const [refundPsbtUR, setRefundPsbtUR] = useState("");
+  const [refundAddress, setRefundAddress] = useState("");
 
   const network = useMemo(
     () => NETWORKS[networkKey] || NETWORKS.testnet4,
@@ -164,6 +167,8 @@ export default function Cold() {
       setGenError("");
       setClaimBundleUR("");
       setClaimQR("");
+      setRefundPsbtBase64("");
+      setRefundPsbtUR("");
       if (!fundingWallet) throw new Error("Select a funding wallet first");
       const fundingXOnly = (fundingWallet.xOnlyHex || "").trim();
       const fundingWif = (fundingWallet.wif || "").trim();
@@ -309,6 +314,55 @@ export default function Cold() {
         });
         setClaimQR(dataUrl);
       }
+
+      // Build refund PSBT
+      if (fundTxidBytes && leaves.refund) {
+        try {
+          // Get control block for refund script
+          const refundRedeem = { output: leaves.refund, redeemVersion: 0xc0 };
+          const p2trRefund = bitcoin.payments.p2tr({
+            internalPubkey,
+            scriptTree,
+            redeem: refundRedeem,
+            network,
+          });
+          const refundWitness = p2trRefund.witness || [];
+          const refundControl = refundWitness.length
+            ? refundWitness[refundWitness.length - 1]
+            : new Uint8Array([]);
+
+          // Set refund address (default to funding wallet address)
+          const defaultRefundAddr = fundingWallet.p2tr || "";
+          if (!refundAddress && defaultRefundAddr) {
+            setRefundAddress(defaultRefundAddr);
+          }
+
+          const refundPsbt = buildRefundPsbt({
+            fundingTxid: Buffer.from(fundTxidBytes).toString('hex'),
+            vout: voutIndex,
+            value: outputValue,
+            fundingScript: output,
+            refundScript: leaves.refund,
+            controlBlock: refundControl,
+            internalPubkey,
+            refundAddress: refundAddress || defaultRefundAddr,
+            expiryHeight: Number(expiry) || 0,
+            network,
+          });
+
+          // Export as base64 and UR
+          const refundPsbtB64 = refundPsbt.toBase64();
+          setRefundPsbtBase64(refundPsbtB64);
+
+          const refundPsbtBytes = refundPsbt.toBuffer();
+          const refundUrEncoder = encodeUR("crypto-psbt", refundPsbtBytes);
+          const refundUrPart = refundUrEncoder.nextPart();
+          setRefundPsbtUR(refundUrPart);
+        } catch (refundErr) {
+          console.warn("Failed to build refund PSBT:", refundErr);
+          // Don't fail the entire generation if refund PSBT fails
+        }
+      }
     } catch (error) {
       setGenError(error instanceof Error ? error.message : String(error));
     }
@@ -407,6 +461,21 @@ export default function Cold() {
               value={message}
               onChange={(event) => setMessage(event.target.value)}
             />
+          </label>
+          <label className="space-y-1 md:col-span-2">
+            <div className="text-sm text-zinc-500">
+              Refund address (optional - defaults to funding wallet address)
+            </div>
+            <input
+              type="text"
+              className="w-full rounded border px-3 py-2 font-mono text-sm"
+              value={refundAddress}
+              placeholder={fundingWallet?.p2tr || "Enter refund address"}
+              onChange={(event) => setRefundAddress(event.target.value)}
+            />
+            <div className="text-xs text-zinc-500">
+              Where refunded sats will be sent after expiry height. Leave blank to use funding wallet address.
+            </div>
           </label>
         </div>
 
@@ -560,6 +629,76 @@ export default function Cold() {
         </section>
       )}
 
+      {refundPsbtBase64 && (
+        <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="inline-flex items-center gap-2 px-2 py-1 rounded-full bg-amber-600 text-white text-xs">
+              REFUND
+            </div>
+            <h2 className="font-semibold">Refund PSBT</h2>
+          </div>
+          <p className="text-sm text-amber-900">
+            <strong>IMPORTANT:</strong> Save this PSBT and the preimage below. You'll need them to reclaim your funds after block height {expiry}.
+          </p>
+
+          <div className="space-y-3">
+            <div>
+              <div className="text-sm text-zinc-700 font-medium mb-1">Preimage (keep this safe!)</div>
+              <div className="bg-white rounded border border-amber-300 px-3 py-2 font-mono text-sm break-all">
+                {message || "(empty)"}
+              </div>
+              <button
+                type="button"
+                className="mt-2 px-3 py-1.5 rounded bg-amber-600 text-white text-sm"
+                onClick={() => copyToClipboard(message)}
+              >
+                Copy Preimage
+              </button>
+            </div>
+
+            <div>
+              <div className="text-sm text-zinc-700 font-medium mb-1">Refund PSBT (Base64)</div>
+              <textarea
+                className="w-full rounded border border-amber-300 px-3 py-2 font-mono text-xs bg-white"
+                rows={4}
+                value={refundPsbtBase64}
+                readOnly
+              />
+              <button
+                type="button"
+                className="mt-2 px-3 py-1.5 rounded bg-amber-600 text-white text-sm"
+                onClick={() => copyToClipboard(refundPsbtBase64)}
+              >
+                Copy Refund PSBT (Base64)
+              </button>
+            </div>
+
+            {refundPsbtUR && (
+              <div>
+                <div className="text-sm text-zinc-700 font-medium mb-1">Refund PSBT (UR)</div>
+                <textarea
+                  className="w-full rounded border border-amber-300 px-3 py-2 font-mono text-xs bg-white"
+                  rows={3}
+                  value={refundPsbtUR}
+                  readOnly
+                />
+                <button
+                  type="button"
+                  className="mt-2 px-3 py-1.5 rounded bg-amber-600 text-white text-sm"
+                  onClick={() => copyToClipboard(refundPsbtUR)}
+                >
+                  Copy Refund PSBT (UR)
+                </button>
+              </div>
+            )}
+
+            <div className="text-xs text-amber-900 bg-amber-100 rounded p-3">
+              <strong>Usage:</strong> Import this PSBT in Refund Mode after block height {expiry}. You'll need the preimage and your funding wallet's private key to sign.
+            </div>
+          </div>
+        </section>
+      )}
+
       <section className="rounded-xl border p-4 space-y-2 text-xs text-zinc-500">
         <div>
           Funding Taproot address:<br />
@@ -601,6 +740,53 @@ function normalizeNetworkKey(networkKey) {
   if (key === "testnet") return "testnet";
   if (key === "signet") return "signet";
   return "testnet4";
+}
+
+function buildRefundPsbt({
+  fundingTxid,
+  vout,
+  value,
+  fundingScript,
+  refundScript,
+  controlBlock,
+  internalPubkey,
+  refundAddress,
+  expiryHeight,
+  network,
+}) {
+  const psbt = new bitcoin.Psbt({ network });
+
+  // Set locktime to expiry height
+  psbt.setLocktime(expiryHeight);
+
+  // Add the funding output as input
+  psbt.addInput({
+    hash: fundingTxid,
+    index: vout,
+    sequence: 0xfffffffe, // Enable locktime
+    witnessUtxo: {
+      script: Buffer.from(fundingScript),
+      value: value,
+    },
+    tapInternalKey: Buffer.from(internalPubkey),
+    tapLeafScript: [{
+      leafVersion: 0xc0,
+      script: Buffer.from(refundScript),
+      controlBlock: Buffer.from(controlBlock),
+    }],
+  });
+
+  // Add refund output (fee will be deducted from this)
+  // User can adjust this value when signing
+  const estimatedFee = 200; // ~1 vbyte * 200 sats/vbyte rough estimate
+  const refundValue = Math.max(546, value - estimatedFee);
+
+  psbt.addOutput({
+    address: refundAddress,
+    value: refundValue,
+  });
+
+  return psbt;
 }
 
 async function autoBuildFundingTransaction({
