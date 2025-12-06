@@ -2,30 +2,12 @@
 
 ## Table of Contents
 
-This API reference is split into multiple documents for better organization:
-
-1. **[Core Libraries API](./API_CORE_LIBRARIES.md)** - Cryptographic functions and Bitcoin operations
-   - Offline Core (taproot.js, psbt.js, ur.js)
-   - Offline Interop (parse-claim-bundle.js)
-   - Server Utilities (mempool.js, utxo-service.js)
-
-2. **[Wallet Management API](./API_WALLET_MANAGEMENT.md)** - Wallet operations and storage
-   - Wallet CRUD operations
-   - Balance management
-   - Transaction history
-   - Storage functions
-
-3. **[HTTP API Routes](./API_HTTP_ROUTES.md)** - Server-side API endpoints
-   - Broadcast API
-   - UTXO API
-   - Balance API
-   - Transaction API
-
-4. **[Component API](./API_COMPONENTS.md)** - React components and UI utilities
-   - WalletManager component
-   - CameraScanner component
-   - ActiveWalletBadge component
-   - Utility functions
+1. [Quick Reference](#quick-reference)
+2. [Type Definitions](#type-definitions)
+3. [Error Handling](#error-handling)
+4. [Best Practices](#best-practices)
+5. [Testing](#testing)
+6. [Migration Guide](#migration-guide)
 
 ---
 
