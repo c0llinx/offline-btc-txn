@@ -9,10 +9,10 @@ import
 {
   loadTransactions,
   updateTransaction,
-  deleteTransaction,
+  clearAllTransactions,
   TXN_STATUS,
 } from "@/lib/transactions";
-import { loadWallets } from "@/lib/wallets";
+import { loadWallets, recordWalletEvent } from "@/lib/wallets";
 
 bitcoin.initEccLib(ecc);
 
@@ -23,6 +23,7 @@ const STATUS_COLORS = {
   [TXN_STATUS.CLAIMED]: "bg-blue-100 text-blue-800",
   [TXN_STATUS.REFUNDABLE]: "bg-amber-100 text-amber-800",
   [TXN_STATUS.REFUNDED]: "bg-green-100 text-green-800",
+  [TXN_STATUS.CANCELLED]: "bg-zinc-100 text-zinc-600",
 };
 
 const STATUS_LABELS = {
@@ -30,6 +31,7 @@ const STATUS_LABELS = {
   [TXN_STATUS.CLAIMED]: "Claimed",
   [TXN_STATUS.REFUNDABLE]: "Refundable",
   [TXN_STATUS.REFUNDED]: "Refunded",
+  [TXN_STATUS.CANCELLED]: "Cancelled",
 };
 
 function RefundContent()
@@ -230,6 +232,38 @@ function RefundContent()
 
     try
     {
+      // First, verify the UTXO exists and is unspent
+      if (tx.fundTxid)
+      {
+        const params = new URLSearchParams({
+          txid: tx.fundTxid,
+          vout: String(tx.vout || 0),
+          network: tx.network || networkKey,
+        });
+        const utxoResp = await fetch(`/api/utxo-status?${params.toString()}`);
+        const utxoData = await utxoResp.json();
+
+        if (utxoData.ok)
+        {
+          // If transaction doesn't exist on-chain, can't refund - suggest cancel
+          if (utxoData.exists === false)
+          {
+            throw new Error("Funding transaction not found on-chain. The transaction may not have been broadcast. Use 'Cancel' to restore your balance.");
+          }
+
+          // If UTXO is already spent, update status and notify user
+          if (utxoData.spent === true)
+          {
+            updateTransaction(tx.id, {
+              status: TXN_STATUS.CLAIMED,
+              claimTxid: utxoData.spentBy || null,
+            });
+            setTransactions(loadTransactions());
+            throw new Error("This UTXO has already been spent (claimed by receiver). Transaction status updated.");
+          }
+        }
+      }
+
       // Build PSBT
       const { psbt, changeAddress, outputValue } = buildRefundPsbt(tx);
 
@@ -283,6 +317,17 @@ function RefundContent()
           status: TXN_STATUS.REFUNDED,
           refundTxid: broadcastData.txid || refundTxid,
         });
+
+        // Restore the refunded funds to wallet balance
+        recordWalletEvent({
+          walletId: tx.senderWalletId,
+          type: "receive",
+          amountSats: outputValue,
+          description: `Refunded from expired claim bundle`,
+          txid: broadcastData.txid || refundTxid,
+          source: "workflow",
+        });
+
         setSuccessMsg(`Refund broadcast successfully! TXID: ${broadcastData.txid || refundTxid}`);
         setTransactions(loadTransactions());
       } else
@@ -318,12 +363,53 @@ function RefundContent()
     }
   }, [autoRefund, currentHeight, transactions, processingId, handleRefund]);
 
-  // Delete transaction
-  const handleDelete = (id) =>
+  // Cancel transaction (restore balance without blockchain refund)
+  const handleCancel = useCallback(async (tx) =>
   {
-    deleteTransaction(id);
+    setError("");
+    setSuccessMsg("");
+
+    // Check if funding tx exists on chain
+    if (tx.fundTxid)
+    {
+      try
+      {
+        const params = new URLSearchParams({
+          txid: tx.fundTxid,
+          vout: String(tx.vout || 0),
+          network: tx.network || networkKey,
+        });
+        const resp = await fetch(`/api/utxo-status?${params.toString()}`);
+        const data = await resp.json();
+
+        // If transaction exists on-chain (regardless of spent status), don't allow cancel
+        if (data.ok && data.exists === true)
+        {
+          setError("Cannot cancel: Funding transaction exists on-chain. Use Refund instead.");
+          return;
+        }
+      } catch (e)
+      {
+        // If check fails, allow cancel (assume tx doesn't exist)
+        console.warn("UTXO check failed, allowing cancel:", e);
+      }
+    }
+
+    // Update status to cancelled
+    updateTransaction(tx.id, { status: TXN_STATUS.CANCELLED });
+
+    // Restore the locked funds to wallet balance
+    recordWalletEvent({
+      walletId: tx.senderWalletId,
+      type: "receive",
+      amountSats: tx.amountSats,
+      description: "Cancelled claim bundle (funds never left wallet)",
+      source: "workflow",
+    });
+
+    setSuccessMsg(`Transaction cancelled. ${tx.amountSats?.toLocaleString()} sats restored to wallet.`);
     setTransactions(loadTransactions());
-  };
+  }, [networkKey]);
 
   // Filter by network
   const filteredTxns = transactions.filter(
@@ -392,6 +478,20 @@ function RefundContent()
           >
             Refresh
           </button>
+          <button
+            onClick={() =>
+            {
+              if (window.confirm("Clear ALL tracked transactions? This cannot be undone."))
+              {
+                clearAllTransactions();
+                setTransactions([]);
+                setSuccessMsg("All transactions cleared.");
+              }
+            }}
+            className="px-3 py-2 rounded bg-red-100 hover:bg-red-200 text-red-700 text-sm"
+          >
+            Clear All
+          </button>
         </div>
         {lastPollTime && (
           <div className="text-xs text-zinc-400">
@@ -429,7 +529,7 @@ function RefundContent()
                 tx={tx}
                 currentHeight={currentHeight}
                 onRefund={() => handleRefund(tx)}
-                onDelete={() => handleDelete(tx.id)}
+                onCancel={() => handleCancel(tx)}
                 processing={processingId === tx.id}
                 wallets={wallets}
               />
@@ -441,7 +541,7 @@ function RefundContent()
   );
 }
 
-function TransactionRow({ tx, currentHeight, onRefund, onDelete, processing, wallets })
+function TransactionRow({ tx, currentHeight, onRefund, onCancel, processing, wallets })
 {
   const wallet = wallets.find((w) => w.id === tx.senderWalletId);
   const blocksRemaining = tx.expiryHeight - (currentHeight || 0);
@@ -449,6 +549,7 @@ function TransactionRow({ tx, currentHeight, onRefund, onDelete, processing, wal
     ? Math.min(100, Math.max(0, ((currentHeight - (tx.expiryHeight - 6)) / 6) * 100))
     : 0;
   const canRefund = tx.status === TXN_STATUS.REFUNDABLE;
+  const canCancel = tx.status === TXN_STATUS.REFUNDABLE; // Only allow cancel after expiry
   const isActive = tx.status === TXN_STATUS.PENDING || tx.status === TXN_STATUS.REFUNDABLE;
 
   return (
@@ -528,12 +629,16 @@ function TransactionRow({ tx, currentHeight, onRefund, onDelete, processing, wal
             {processing ? "Processing..." : "Refund Now"}
           </button>
         )}
-        <button
-          onClick={onDelete}
-          className="px-3 py-1.5 rounded border border-red-300 text-red-600 hover:bg-red-50 text-sm"
-        >
-          Delete
-        </button>
+        {canCancel && (
+          <button
+            onClick={onCancel}
+            disabled={processing}
+            className="px-3 py-1.5 rounded border border-zinc-400 text-zinc-600 hover:bg-zinc-100 text-sm disabled:opacity-50"
+            title="Cancel if funding transaction was never broadcast"
+          >
+            Cancel
+          </button>
+        )}
       </div>
     </div>
   );

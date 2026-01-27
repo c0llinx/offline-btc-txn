@@ -15,7 +15,7 @@ import * as bitcoin from "bitcoinjs-lib";
 import * as ecc from "@bitcoinerlab/secp256k1";
 import { schnorr as nobleSchnorr, secp256k1 } from "@noble/curves/secp256k1";
 import { ECPairFactory } from "ecpair";
-import { getActiveWallet, loadWallets } from "@/lib/wallets";
+import { getActiveWallet, loadWallets, recordWalletEvent } from "@/lib/wallets";
 import { saveTransaction } from "@/lib/transactions";
 import { tapTweakHash, tweakKey } from "bitcoinjs-lib/src/payments/bip341";
 import { copyToClipboard } from "@/lib/clipboard";
@@ -378,6 +378,35 @@ export default function Cold()
         setClaimQR(dataUrl);
       }
 
+      // Broadcast the funding transaction to lock funds on-chain
+      if (trimmedFundingHex)
+      {
+        const broadcastResp = await fetch("/api/broadcast", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            hex: trimmedFundingHex,
+            network: networkKey,
+          }),
+        });
+        const broadcastData = await broadcastResp.json();
+
+        if (!broadcastData.ok)
+        {
+          // Check if it's already broadcast (not an error)
+          const errorMsg = String(broadcastData.error || "").toLowerCase();
+          const isAlreadyBroadcast =
+            errorMsg.includes("already in") ||
+            errorMsg.includes("already known") ||
+            errorMsg.includes("exists");
+
+          if (!isAlreadyBroadcast)
+          {
+            throw new Error(`Failed to broadcast funding transaction: ${broadcastData.error || "Unknown error"}. Funds were NOT locked.`);
+          }
+        }
+      }
+
       // Save transaction to tracker for refund monitoring
       const refundRedeem = { output: leaves.refund, redeemVersion: 0xc0 };
       const p2trRefund = bitcoin.payments.p2tr({
@@ -412,6 +441,16 @@ export default function Cold()
           refundControlBlockHex: Buffer.from(refundControl).toString("hex"),
           network: networkKey,
           preimageText: message || "",
+        });
+
+        // Lock the funds from the wallet balance
+        recordWalletEvent({
+          walletId: fundingWallet.id,
+          type: "send",
+          amountSats: outputValue,
+          description: `Locked in claim bundle for offline payment`,
+          txid: fundTxidHex || "",
+          source: "workflow",
         });
       } catch (saveErr)
       {
@@ -1029,11 +1068,23 @@ function deriveTaprootSigner({ wallet, network })
     throw new Error("Unable to derive private key from wallet WIF for funding transaction");
   }
 
-  const tweak = tapTweakHash(internalKey);
   const n = secp256k1.CURVE.n;
-  const privateInt = bufferToBigInt(Buffer.from(baseKey.privateKey));
+  let privateInt = bufferToBigInt(Buffer.from(baseKey.privateKey));
+
+  // BIP-340: If the public key has odd y, negate the private key first
+  const pubKey = Buffer.from(ecc.pointFromScalar(baseKey.privateKey, true));
+  const pubKeyYIsOdd = (pubKey[0] === 0x03);
+  if (pubKeyYIsOdd)
+  {
+    privateInt = (n - privateInt) % n;
+  }
+
+  // Add the tweak
+  const tweak = tapTweakHash(internalKey);
   const tweakInt = bufferToBigInt(Buffer.from(tweak));
   let tweakedInt = (privateInt + tweakInt) % n;
+
+  // Check output key parity
   const { parity, x: outputKey } = tweakKey(internalKey);
   if (parity === 1)
   {

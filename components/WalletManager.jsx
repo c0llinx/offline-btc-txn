@@ -1,19 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  generateWallet,
-  walletFromWIF,
-  loadWallets,
-  saveWallets,
-  getActiveWalletId,
-  setActiveWalletId,
-  deleteWallet,
-  renameWallet,
-  markWalletNote,
-  recordWalletEvent,
-  setWalletBalance,
-} from "@/lib/wallets";
+import
+  {
+    generateWallet,
+    walletFromWIF,
+    loadWallets,
+    saveWallets,
+    getActiveWalletId,
+    setActiveWalletId,
+    deleteWallet,
+    renameWallet,
+    markWalletNote,
+    recordWalletEvent,
+    setWalletBalance,
+  } from "@/lib/wallets";
+import { loadTransactions, TXN_STATUS } from "@/lib/transactions";
 
 import { copyToClipboard } from "@/lib/clipboard";
 
@@ -24,14 +26,16 @@ const networks = [
   { key: "mainnet", label: "Mainnet" },
 ];
 
-function formatSats(value) {
+function formatSats(value)
+{
   const formatter = new Intl.NumberFormat(undefined, {
     maximumFractionDigits: 0,
   });
   return `${formatter.format(Math.trunc(value || 0))} sats`;
 }
 
-function formatTimeAgo(value) {
+function formatTimeAgo(value)
+{
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
@@ -42,107 +46,128 @@ function formatTimeAgo(value) {
   return date.toLocaleString();
 }
 
-export default function WalletManager() {
+export default function WalletManager()
+{
   const [wallets, setWallets] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [networkKey, setNetworkKey] = useState("testnet4");
   const [toast, setToast] = useState(null);
   const [refreshingId, setRefreshingId] = useState(null);
 
-  function refreshFromStorage() {
+  function refreshFromStorage()
+  {
     setWallets(loadWallets());
     setActiveId(getActiveWalletId());
   }
 
-  useEffect(() => {
+  useEffect(() =>
+  {
     refreshFromStorage();
   }, []);
 
-  useEffect(() => {
+  useEffect(() =>
+  {
     const handler = () => refreshFromStorage();
     window.addEventListener("offline-wallets-change", handler);
     window.addEventListener("storage", handler);
-    return () => {
+    return () =>
+    {
       window.removeEventListener("offline-wallets-change", handler);
       window.removeEventListener("storage", handler);
     };
   }, []);
 
-  const sortedWallets = useMemo(() => {
-    return [...wallets].sort((a, b) => {
+  const sortedWallets = useMemo(() =>
+  {
+    return [...wallets].sort((a, b) =>
+    {
       const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
       const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
       return timeB - timeA;
     });
   }, [wallets]);
 
-  function showToast(message, variant = "success") {
+  function showToast(message, variant = "success")
+  {
     setToast({ message, variant });
     setTimeout(() => setToast(null), 2500);
   }
 
-  function persist(updatedWallets, selectedId = activeId) {
+  function persist(updatedWallets, selectedId = activeId)
+  {
     saveWallets(updatedWallets);
-    if (selectedId) {
+    if (selectedId)
+    {
       setActiveWalletId(selectedId);
     }
     refreshFromStorage();
   }
 
-  function handleGenerate() {
-    try {
+  function handleGenerate()
+  {
+    try
+    {
       const wallet = generateWallet(networkKey);
       wallet.label = `Wallet ${sortedWallets.length + 1}`;
       const updated = [...wallets, wallet];
       persist(updated, wallet.id);
       showToast("New wallet generated and saved.");
-    } catch (error) {
+    } catch (error)
+    {
       showToast(error.message || "Failed to generate wallet", "error");
     }
   }
 
-  async function handleImport() {
+  async function handleImport()
+  {
     const wif = window.prompt("Paste the WIF (Wallet Import Format) key:");
     if (!wif) return;
     const label = window.prompt("Optional label for this wallet:", "");
-    try {
+    try
+    {
       const wallet = walletFromWIF(wif, label || undefined);
       const existing = wallets.filter((w) => w.publicKeyHex === wallet.publicKeyHex);
       const updated = existing.length
         ? wallets.map((w) =>
-            w.publicKeyHex === wallet.publicKeyHex
-              ? {
-                  ...w,
-                  ...wallet,
-                  balanceSats: typeof w.balanceSats === "number" ? w.balanceSats : wallet.balanceSats,
-                  history: Array.isArray(w.history) ? w.history : wallet.history,
-                }
-              : w,
-          )
+          w.publicKeyHex === wallet.publicKeyHex
+            ? {
+              ...w,
+              ...wallet,
+              balanceSats: typeof w.balanceSats === "number" ? w.balanceSats : wallet.balanceSats,
+              history: Array.isArray(w.history) ? w.history : wallet.history,
+            }
+            : w,
+        )
         : [...wallets, wallet];
       persist(updated, wallet.id);
       showToast("Wallet imported.");
-    } catch (error) {
+    } catch (error)
+    {
       showToast(error.message || "Failed to import wallet", "error");
     }
   }
 
-  function handleSelect(id) {
+  function handleSelect(id)
+  {
     setActiveWalletId(id);
     setActiveId(id);
     showToast("Wallet marked active.");
   }
 
-  async function handleCopy(value, label) {
-    try {
+  async function handleCopy(value, label)
+  {
+    try
+    {
       await copyToClipboard(value);
       showToast(`${label} copied to clipboard.`);
-    } catch {
+    } catch
+    {
       showToast(`Unable to copy ${label}`, "error");
     }
   }
 
-  function handleDelete(id) {
+  function handleDelete(id)
+  {
     if (!window.confirm("Delete this wallet permanently?")) return;
     const updated = deleteWallet(id);
     setWallets(updated);
@@ -150,7 +175,8 @@ export default function WalletManager() {
     showToast("Wallet deleted.");
   }
 
-  function handleRename(id, current) {
+  function handleRename(id, current)
+  {
     const next = window.prompt("Rename wallet:", current || "");
     if (next === null) return;
     const updated = renameWallet(id, next.trim() || current);
@@ -158,7 +184,8 @@ export default function WalletManager() {
     showToast("Wallet renamed.");
   }
 
-  function handleNote(id, current) {
+  function handleNote(id, current)
+  {
     const next = window.prompt("Wallet note (store seed location, device, etc.)", current || "");
     if (next === null) return;
     const updated = markWalletNote(id, next);
@@ -166,7 +193,8 @@ export default function WalletManager() {
     showToast("Wallet note updated.");
   }
 
-  function handleRecord(walletId, direction) {
+  function handleRecord(walletId, direction)
+  {
     const amountStr = window.prompt(
       direction === "receive"
         ? "Amount received (sats):"
@@ -175,7 +203,8 @@ export default function WalletManager() {
     );
     if (amountStr === null) return;
     const amount = Math.abs(Math.trunc(Number(amountStr)));
-    if (!amount) {
+    if (!amount)
+    {
       showToast("Amount must be greater than zero", "error");
       return;
     }
@@ -187,7 +216,8 @@ export default function WalletManager() {
       description: description || undefined,
       source: "manual",
     });
-    if (!updated) {
+    if (!updated)
+    {
       showToast("Failed to record entry", "error");
       return;
     }
@@ -195,19 +225,22 @@ export default function WalletManager() {
     showToast(direction === "receive" ? "Balance increased" : "Balance decreased");
   }
 
-  function handleManualSet(walletId, currentBalance) {
+  function handleManualSet(walletId, currentBalance)
+  {
     const next = window.prompt(
       "Set balance (sats):",
       String(Math.trunc(currentBalance || 0)),
     );
     if (next === null) return;
     const parsed = Math.trunc(Number(next));
-    if (Number.isNaN(parsed)) {
+    if (Number.isNaN(parsed))
+    {
       showToast("Invalid amount", "error");
       return;
     }
     const result = setWalletBalance(walletId, parsed, "Manual set", "manual");
-    if (!result) {
+    if (!result)
+    {
       showToast("Failed to update balance", "error");
       return;
     }
@@ -215,26 +248,31 @@ export default function WalletManager() {
     showToast("Balance updated");
   }
 
-  async function handleRefresh(wallet) {
+  async function handleRefresh(wallet)
+  {
     if (!wallet) return;
     const addresses = (
       Array.isArray(wallet.taprootAddresses) && wallet.taprootAddresses.length > 0
         ? wallet.taprootAddresses
         : [wallet.p2tr]
     ).filter(Boolean);
-    if (addresses.length === 0) {
+    if (addresses.length === 0)
+    {
       showToast("No address to refresh", "error");
       return;
     }
-    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    if (typeof navigator !== "undefined" && navigator.onLine === false)
+    {
       showToast("Offline: cannot reach mempool", "error");
       return;
     }
     setRefreshingId(wallet.id);
-    try {
+    try
+    {
       let total = 0;
       let pendingTotal = 0;
-      for (const address of addresses) {
+      for (const address of addresses)
+      {
         const params = new URLSearchParams({
           address,
           network: (wallet.network || "testnet4").toLowerCase(),
@@ -243,7 +281,8 @@ export default function WalletManager() {
           headers: { "content-type": "application/json" },
           cache: "no-store",
         });
-        if (!res.ok) {
+        if (!res.ok)
+        {
           const payload = await res.json().catch(() => ({}));
           throw new Error(payload.error || res.statusText || "Failed to load UTXOs");
         }
@@ -261,18 +300,36 @@ export default function WalletManager() {
         total += confirmed;
         pendingTotal += pending;
       }
+
+      // Subtract locked amounts from pending transactions
+      const pendingTxns = loadTransactions().filter(
+        (tx) =>
+          tx.senderWalletId === wallet.id &&
+          (tx.status === TXN_STATUS.PENDING || tx.status === TXN_STATUS.REFUNDABLE)
+      );
+      const lockedAmount = pendingTxns.reduce(
+        (sum, tx) => sum + (Number(tx.amountSats) || 0),
+        0
+      );
+      const adjustedTotal = Math.max(0, total - lockedAmount);
+      const adjustedPending = Math.max(0, pendingTotal);
+
       setWalletBalance(
         wallet.id,
-        total,
-        `Synced via Refresh (${addresses.join(", ")})`,
+        adjustedTotal,
+        lockedAmount > 0
+          ? `Synced via Refresh (${formatSats(lockedAmount)} locked in pending transactions)`
+          : `Synced via Refresh (${addresses.join(", ")})`,
         "sync",
-        { pendingSats: pendingTotal },
+        { pendingSats: adjustedPending },
       );
       refreshFromStorage();
       showToast("Balance refreshed");
-    } catch (error) {
+    } catch (error)
+    {
       showToast(error instanceof Error ? error.message : "Refresh failed", "error");
-    } finally {
+    } finally
+    {
       setRefreshingId(null);
     }
   }
@@ -330,14 +387,14 @@ export default function WalletManager() {
         </div>
       ) : (
         <div className="space-y-3">
-          {sortedWallets.map((wallet) => {
+          {sortedWallets.map((wallet) =>
+          {
             const isActive = wallet.id === activeId;
             return (
               <article
                 key={wallet.id}
-                className={`rounded-xl border p-4 bg-white dark:bg-zinc-900 shadow-sm ${
-                  isActive ? "border-blue-500" : "border-zinc-200 dark:border-zinc-800"
-                }`}
+                className={`rounded-xl border p-4 bg-white dark:bg-zinc-900 shadow-sm ${isActive ? "border-blue-500" : "border-zinc-200 dark:border-zinc-800"
+                  }`}
               >
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                   <div>
@@ -465,22 +522,22 @@ export default function WalletManager() {
                   <div>
                     <dt className="text-zinc-500">Addresses</dt>
                     <dd className="space-y-1">
-                    <div>
-                      <div className="text-xs text-zinc-500">Taproot addresses</div>
-                      <div className="space-y-1">
-                        {(Array.isArray(wallet.taprootAddresses) && wallet.taprootAddresses.length > 0
-                          ? wallet.taprootAddresses
-                          : [wallet.p2tr || "—"]
-                        ).map((addr) => (
-                          <div
-                            key={addr}
-                            className="font-mono break-all text-xs bg-zinc-100 dark:bg-zinc-800 rounded p-2"
-                          >
-                            {addr || "—"}
-                          </div>
-                        ))}
+                      <div>
+                        <div className="text-xs text-zinc-500">Taproot addresses</div>
+                        <div className="space-y-1">
+                          {(Array.isArray(wallet.taprootAddresses) && wallet.taprootAddresses.length > 0
+                            ? wallet.taprootAddresses
+                            : [wallet.p2tr || "—"]
+                          ).map((addr) => (
+                            <div
+                              key={addr}
+                              className="font-mono break-all text-xs bg-zinc-100 dark:bg-zinc-800 rounded p-2"
+                            >
+                              {addr || "—"}
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
                     </dd>
                     <div className="flex gap-2 text-xs mt-2">
                       {Array.isArray(wallet.taprootAddresses) && wallet.taprootAddresses.length > 0 ? (
@@ -532,11 +589,10 @@ export default function WalletManager() {
 
       {toast && (
         <div
-          className={`fixed bottom-6 right-6 px-4 py-2 rounded-md shadow-lg text-sm ${
-            toast.variant === "error"
+          className={`fixed bottom-6 right-6 px-4 py-2 rounded-md shadow-lg text-sm ${toast.variant === "error"
               ? "bg-red-600 text-white"
               : "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-          }`}
+            }`}
         >
           {toast.message}
         </div>

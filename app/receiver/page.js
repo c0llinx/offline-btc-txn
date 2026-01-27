@@ -28,7 +28,8 @@ const BROADCAST_ENDPOINT_DEFAULTS = {
 
 const CUSTOM_DEST_OPTION = "__custom__";
 
-function ReceiverInner() {
+function ReceiverInner()
+{
   const [claimInput, setClaimInput] = useState("");
   const [claimErr, setClaimErr] = useState("");
   const [claimData, setClaimData] = useState(null);
@@ -51,9 +52,20 @@ function ReceiverInner() {
   const [building, setBuilding] = useState(false);
   const [destinationSource, setDestinationSource] = useState(CUSTOM_DEST_OPTION);
   const [allowAutoDestination, setAllowAutoDestination] = useState(true);
+  const [currentHeight, setCurrentHeight] = useState(null);
 
-  useEffect(() => {
-    const sync = () => {
+  // Check if the claim bundle has expired based on current block height
+  const isExpired = useMemo(() =>
+  {
+    if (!claimData || currentHeight === null) return false;
+    const expiryHeight = Number(claimData.expires_at ?? 0);
+    return expiryHeight > 0 && currentHeight >= expiryHeight;
+  }, [claimData, currentHeight]);
+
+  useEffect(() =>
+  {
+    const sync = () =>
+    {
       const list = loadWallets();
       setWallets(list);
       setActiveWalletState(getActiveWallet() || list[0] || null);
@@ -61,31 +73,69 @@ function ReceiverInner() {
     sync();
     window.addEventListener("offline-wallets-change", sync);
     window.addEventListener("storage", sync);
-    return () => {
+    return () =>
+    {
       window.removeEventListener("offline-wallets-change", sync);
       window.removeEventListener("storage", sync);
     };
   }, []);
 
-  const selectedWallet = useMemo(() => {
+  const selectedWallet = useMemo(() =>
+  {
     if (!wallets.length) return null;
-    if (selectedWalletId) {
+    if (selectedWalletId)
+    {
       return wallets.find((wallet) => wallet.id === selectedWalletId) || null;
     }
     if (activeWallet) return activeWallet;
     return wallets[0] || null;
   }, [wallets, selectedWalletId, activeWallet]);
 
-  const walletAddresses = useMemo(() => {
+  // Fetch current block height and poll periodically
+  useEffect(() =>
+  {
+    let mounted = true;
+    const networkKey = normalizeNetworkKey(claimData?.network || selectedWallet?.network || "testnet4");
+
+    async function fetchHeight()
+    {
+      try
+      {
+        const res = await fetch(`/api/blockheight?network=${networkKey}`);
+        const data = await res.json();
+        if (mounted && data.ok && typeof data.height === "number")
+        {
+          setCurrentHeight(data.height);
+        }
+      } catch (e)
+      {
+        console.warn("Failed to fetch block height:", e);
+      }
+    }
+
+    fetchHeight();
+    const interval = setInterval(fetchHeight, 30000); // Poll every 30 seconds
+
+    return () =>
+    {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [claimData?.network, selectedWallet?.network]);
+
+  const walletAddresses = useMemo(() =>
+  {
     if (!selectedWallet) return [];
     const rawList = [
       selectedWallet.p2tr,
       ...(Array.isArray(selectedWallet.taprootAddresses) ? selectedWallet.taprootAddresses : []),
     ];
     const unique = [];
-    for (const entry of rawList) {
+    for (const entry of rawList)
+    {
       const trimmed = typeof entry === "string" ? entry.trim() : "";
-      if (trimmed && isTaprootAddress(trimmed) && !unique.includes(trimmed)) {
+      if (trimmed && isTaprootAddress(trimmed) && !unique.includes(trimmed))
+      {
         unique.push(trimmed);
       }
     }
@@ -94,22 +144,27 @@ function ReceiverInner() {
 
   const walletAddressesKey = useMemo(() => walletAddresses.join("|"), [walletAddresses]);
 
-  useEffect(() => {
+  useEffect(() =>
+  {
     if (!wallets.length) return;
     const receiverHint = (claimData?.receiver_wallet_id || "").trim();
-    if (receiverHint) {
+    if (receiverHint)
+    {
       const hinted = wallets.find((wallet) => wallet.id === receiverHint);
-      if (hinted) {
+      if (hinted)
+      {
         setSelectedWalletId(hinted.id);
         return;
       }
     }
     const claimKey = (claimData?.claim_pubkey_hex || "").trim().toLowerCase();
-    if (claimKey) {
+    if (claimKey)
+    {
       const match = wallets.find(
         (wallet) => String(wallet.xOnlyHex || "").trim().toLowerCase() === claimKey,
       );
-      if (match) {
+      if (match)
+      {
         setSelectedWalletId(match.id);
         return;
       }
@@ -118,29 +173,36 @@ function ReceiverInner() {
     setSelectedWalletId((prev) => prev || fallbackId);
   }, [wallets, activeWallet, claimData?.claim_pubkey_hex]);
 
-  useEffect(() => {
+  useEffect(() =>
+  {
     setAllowAutoDestination(true);
   }, [selectedWallet?.id]);
 
-  useEffect(() => {
-    if (!selectedWallet) {
+  useEffect(() =>
+  {
+    if (!selectedWallet)
+    {
       if (destinationSource !== CUSTOM_DEST_OPTION) setDestinationSource(CUSTOM_DEST_OPTION);
       return;
     }
-    if (!walletAddresses.length) {
+    if (!walletAddresses.length)
+    {
       if (destinationSource !== CUSTOM_DEST_OPTION) setDestinationSource(CUSTOM_DEST_OPTION);
       return;
     }
     if (!allowAutoDestination) return;
-    if (destinationSource === CUSTOM_DEST_OPTION) {
-      if (!destinationAddress) {
+    if (destinationSource === CUSTOM_DEST_OPTION)
+    {
+      if (!destinationAddress)
+      {
         const fallback = walletAddresses[0];
         setDestinationSource(fallback);
         setDestinationAddress(fallback);
       }
       return;
     }
-    if (!walletAddresses.includes(destinationSource)) {
+    if (!walletAddresses.includes(destinationSource))
+    {
       const fallback = walletAddresses[0];
       setDestinationSource(fallback);
       setDestinationAddress(fallback);
@@ -154,21 +216,25 @@ function ReceiverInner() {
     allowAutoDestination,
   ]);
 
-  useEffect(() => {
+  useEffect(() =>
+  {
     if (!claimData) return;
     const amount = Number(claimData.send_value_sat || 0);
     if (amount > 0) setDestAmount(amount);
   }, [claimData]);
 
-  useEffect(() => {
+  useEffect(() =>
+  {
     if (!selectedWallet) return;
     if (!claimData?.requires_signature) return;
     if (!allowAutoDestination) return;
     const firstAddress = walletAddresses[0];
     if (!firstAddress) return;
     setDestinationAddress((prev) => prev || firstAddress);
-    setDestinationSource((prev) => {
-      if (prev === CUSTOM_DEST_OPTION || !walletAddresses.includes(prev)) {
+    setDestinationSource((prev) =>
+    {
+      if (prev === CUSTOM_DEST_OPTION || !walletAddresses.includes(prev))
+      {
         return firstAddress;
       }
       return prev;
@@ -181,11 +247,13 @@ function ReceiverInner() {
     allowAutoDestination,
   ]);
 
-  async function handleDecodeBundle() {
+  async function handleDecodeBundle()
+  {
     setClaimErr("");
     setClaimData(null);
     setBroadcastMsg("");
-    try {
+    try
+    {
       const lines = (claimInput || "")
         .split(/\r?\n/)
         .map((line) => line.trim())
@@ -193,7 +261,8 @@ function ReceiverInner() {
       if (lines.length === 0) throw new Error("Paste one or more UR lines");
       const decoded = await decodeUR(lines);
       const type = String(decoded?.type || "").toLowerCase();
-      if (type !== "claim-bundle") {
+      if (type !== "claim-bundle")
+      {
         throw new Error(`Expected UR type 'claim-bundle', got '${decoded?.type || "unknown"}'`);
       }
       const parsed = parseClaimBundle(toUint8Array(decoded.cbor));
@@ -210,34 +279,42 @@ function ReceiverInner() {
       const claimPubKeyHex = bufferToHex(parsed.R_pub || parsed.receiver_pub || parsed.claim_pubkey);
       const requiresSignature = Boolean(
         (typeof parsed.requires_signature === "boolean" && parsed.requires_signature) ||
-          (typeof parsed.requires_signature === "number" && parsed.requires_signature !== 0) ||
-          parsed.meta?.requires_signature || claimPubKeyHex,
+        (typeof parsed.requires_signature === "number" && parsed.requires_signature !== 0) ||
+        parsed.meta?.requires_signature || claimPubKeyHex,
       );
-      if (fundTxRawHex) {
+      if (fundTxRawHex)
+      {
         let tx;
-        try {
+        try
+        {
           tx = bitcoin.Transaction.fromHex(fundTxRawHex);
-        } catch (err) {
+        } catch (err)
+        {
           throw new Error("Claim bundle funding transaction is invalid");
         }
         finalTxidHex = tx.getId();
-        if (fundingScriptHex) {
+        if (fundingScriptHex)
+        {
           const scriptBuf = Buffer.from(fundingScriptHex, "hex");
           const matchIdx = tx.outs.findIndex((out) => out.script.equals(scriptBuf));
-          if (matchIdx >= 0) {
+          if (matchIdx >= 0)
+          {
             voutIndex = matchIdx >>> 0;
             prevValue = Number(tx.outs[matchIdx]?.value ?? prevValue) >>> 0;
           }
-        } else if (tx.outs[voutIndex]) {
+        } else if (tx.outs[voutIndex])
+        {
           fundingScriptHex = Buffer.from(tx.outs[voutIndex].script).toString("hex");
           prevValue = Number(tx.outs[voutIndex]?.value ?? prevValue) >>> 0;
         }
-        if (!(prevValue > 0)) {
+        if (!(prevValue > 0))
+        {
           const fallbackOut = tx.outs[voutIndex];
           prevValue = Number(fallbackOut?.value ?? 0) >>> 0;
         }
         const endpoint = endpointFromBundle || defaultBroadcastEndpoint(normalizedNetwork);
-        try {
+        try
+        {
           const broadcastResult = await broadcastRawTransaction(
             fundTxRawHex,
             endpoint,
@@ -250,7 +327,8 @@ function ReceiverInner() {
               ? `Funding transaction already known (${finalTxidHex}).`
               : `Funding transaction broadcasted (${finalTxidHex}).`,
           );
-        } catch (broadcastError) {
+        } catch (broadcastError)
+        {
           const message = broadcastError instanceof Error ? broadcastError.message : String(broadcastError);
           setClaimErr(message);
           setBroadcastMsg("");
@@ -278,37 +356,44 @@ function ReceiverInner() {
       setResultMsg("");
       setSignedHex("");
       setPsbtBase64("");
-      if (requiresSignature && walletAddresses.length) {
+      if (requiresSignature && walletAddresses.length)
+      {
         const fallbackAddress = destinationAddress && walletAddresses.includes(destinationAddress)
           ? destinationAddress
           : walletAddresses[0];
         setAllowAutoDestination(true);
         setDestinationSource(fallbackAddress);
         setDestinationAddress(fallbackAddress);
-      } else {
+      } else
+      {
         setAllowAutoDestination(false);
         setDestinationSource(CUSTOM_DEST_OPTION);
-        setDestinationAddress((prev) => {
+        setDestinationAddress((prev) =>
+        {
           const existing = prev?.trim();
           return existing || "";
         });
       }
-      if (!finalTxidHex && !fundTxRawHex) {
+      if (!finalTxidHex && !fundTxRawHex)
+      {
         setBroadcastMsg("Funding transaction not embedded. Enter the txid and output info once it is broadcast.");
       }
-    } catch (error) {
+    } catch (error)
+    {
       setClaimErr(error instanceof Error ? error.message : String(error));
     }
   }
 
-  async function buildAndSign() {
+  async function buildAndSign()
+  {
     setClaimErr("");
     setResultMsg("");
     setSignedHex("");
     setPsbtBase64("");
     if (building) return;
     let broadcastAttempted = false;
-    try {
+    try
+    {
       setBuilding(true);
       if (!claimData) throw new Error("Decode a claim bundle first");
       if (!selectedWallet) throw new Error("Select a wallet to sign with");
@@ -316,7 +401,8 @@ function ReceiverInner() {
       const claimPubKeyHex = String(claimData.claim_pubkey_hex || "").trim().toLowerCase();
       const requiresSignature = Boolean(claimData.requires_signature);
       const txid = (fundTxId || claimData.fund_txid_hex || "").trim();
-      if (!/^[0-9a-fA-F]{64}$/.test(txid)) {
+      if (!/^[0-9a-fA-F]{64}$/.test(txid))
+      {
         throw new Error(
           "Funding txid required. Paste the broadcast transaction id (64 hex) into the Funding txid field before signing.",
         );
@@ -326,14 +412,15 @@ function ReceiverInner() {
       ) >>> 0;
       const prevValue = Number(
         (Number.isFinite(prevoutValue) ? prevoutValue : null) ??
-          claimData.value ??
-          claimData.send_value_sat ??
-          0,
+        claimData.value ??
+        claimData.send_value_sat ??
+        0,
       ) >>> 0;
       if (!(prevValue > 0)) throw new Error("Funding output value invalid");
       const payoutAddress = (destinationAddress || "").trim();
       if (!payoutAddress) throw new Error("Destination address required");
-      if (!isTaprootAddress(payoutAddress)) {
+      if (!isTaprootAddress(payoutAddress))
+      {
         throw new Error("Destination must be a Taproot (bc1p/tb1p) address");
       }
       const feeRateSatVb = Math.max(1, Math.trunc(Number(feeRate) || 1));
@@ -367,9 +454,11 @@ function ReceiverInner() {
       });
 
       const fee = Math.ceil(estimateVsize(1) * feeRateSatVb);
-      if (prevValue < payoutValue + fee) {
+      if (prevValue < payoutValue + fee)
+      {
         const adjusted = prevValue - fee;
-        if (!(adjusted > 0)) {
+        if (!(adjusted > 0))
+        {
           throw new Error("Prevout value is insufficient for payout plus fee");
         }
         payoutValue = adjusted;
@@ -380,7 +469,8 @@ function ReceiverInner() {
       psbt.addOutput({ address: payoutAddress, value: payoutValue });
 
       let finalWitness;
-      if (requiresSignature) {
+      if (requiresSignature)
+      {
         const signerKey = resolveClaimSigningKey({
           selectedWallet,
           claimPubKeyHex,
@@ -400,7 +490,8 @@ function ReceiverInner() {
           Buffer.from(claimData.script),
           Buffer.from(claimData.control || claimData.controlBlock || []),
         ]);
-      } else {
+      } else
+      {
         finalWitness = witnessStackToScriptWitness([
           Buffer.from(secretBytes),
           Buffer.from(claimData.script),
@@ -416,15 +507,19 @@ function ReceiverInner() {
       setSignedHex(rawHex);
       setPsbtBase64(psbtB64);
       const normalizedTarget = payoutAddress.toLowerCase();
-      const paysTarget = finalTx.outs.some((out) => {
-        try {
+      const paysTarget = finalTx.outs.some((out) =>
+      {
+        try
+        {
           const derived = bitcoin.address.fromOutputScript(out.script, networkParams);
           return String(derived || "").toLowerCase() === normalizedTarget;
-        } catch {
+        } catch
+        {
           return false;
         }
       });
-      if (!paysTarget) {
+      if (!paysTarget)
+      {
         throw new Error("Claim transaction build failed: destination address missing from outputs");
       }
 
@@ -448,7 +543,8 @@ function ReceiverInner() {
       setResultMsg(messageParts.join(" "));
 
       const creditWallet = findWalletByAddress(wallets, payoutAddress) || selectedWallet;
-      if (creditWallet?.id) {
+      if (creditWallet?.id)
+      {
         recordWalletEvent({
           walletId: creditWallet.id,
           type: "receive",
@@ -462,16 +558,20 @@ function ReceiverInner() {
       const nextWallets = loadWallets();
       setWallets(nextWallets);
       setActiveWalletState(getActiveWallet() || nextWallets[0] || null);
-    } catch (error) {
+    } catch (error)
+    {
       const message = error instanceof Error ? error.message : String(error);
       setClaimErr(message);
-      if (broadcastAttempted) {
+      if (broadcastAttempted)
+      {
         setResultMsg(`Claim transaction prepared but broadcast failed: ${message}`);
-      } else {
+      } else
+      {
         setResultMsg("");
       }
       setBroadcastMsg("");
-    } finally {
+    } finally
+    {
       setBuilding(false);
     }
   }
@@ -556,28 +656,31 @@ function ReceiverInner() {
               Wallet selection is auto-filled on decode when keys match the bundle.
             </div>
           </label>
-      <label className="space-y-1">
-        <div className="text-sm text-zinc-500">Preimage / secret</div>
-        <input
-          className="w-full rounded border px-3 py-2 font-mono"
-          value={preimageInput}
-          onChange={(event) => {
-            setPreimageInput(event.target.value);
-            setClaimErr("");
-          }}
-          placeholder="Exact secret text or hex"
-        />
-      </label>
+          <label className="space-y-1">
+            <div className="text-sm text-zinc-500">Preimage / secret</div>
+            <input
+              className="w-full rounded border px-3 py-2 font-mono"
+              value={preimageInput}
+              onChange={(event) =>
+              {
+                setPreimageInput(event.target.value);
+                setClaimErr("");
+              }}
+              placeholder="Exact secret text or hex"
+            />
+          </label>
           <div className="space-y-2">
             <label className="space-y-1 block">
               <div className="text-sm text-zinc-500">Destination address</div>
               <select
                 className="w-full rounded border px-3 py-2"
                 value={destinationSource}
-                onChange={(event) => {
+                onChange={(event) =>
+                {
                   const value = event.target.value;
                   setClaimErr("");
-                  if (value === CUSTOM_DEST_OPTION) {
+                  if (value === CUSTOM_DEST_OPTION)
+                  {
                     setDestinationSource(CUSTOM_DEST_OPTION);
                     setAllowAutoDestination(false);
                     return;
@@ -598,7 +701,8 @@ function ReceiverInner() {
             <input
               className="w-full rounded border px-3 py-2"
               value={destinationAddress}
-              onChange={(event) => {
+              onChange={(event) =>
+              {
                 if (destinationSource !== CUSTOM_DEST_OPTION) return;
                 setAllowAutoDestination(false);
                 setDestinationAddress(event.target.value);
@@ -622,10 +726,12 @@ function ReceiverInner() {
               min={0}
               step={1}
               onWheel={(event) => event.currentTarget.blur()}
-              onKeyDown={(event) => {
+              onKeyDown={(event) =>
+              {
                 if (["-", "e", "E", "+"].includes(event.key)) event.preventDefault();
               }}
-              onChange={(event) => {
+              onChange={(event) =>
+              {
                 setDestAmount(Number(event.target.value) || 0);
                 setClaimErr("");
               }}
@@ -636,7 +742,8 @@ function ReceiverInner() {
             <input
               className="w-full rounded border px-3 py-2 font-mono"
               value={fundTxId}
-              onChange={(event) => {
+              onChange={(event) =>
+              {
                 setFundTxId(event.target.value.trim());
                 setClaimErr("");
               }}
@@ -650,7 +757,8 @@ function ReceiverInner() {
               className="w-full rounded border px-3 py-2"
               value={fundVout}
               min={0}
-              onChange={(event) => {
+              onChange={(event) =>
+              {
                 setFundVout(Number(event.target.value) || 0);
                 setClaimErr("");
               }}
@@ -664,7 +772,8 @@ function ReceiverInner() {
               value={prevoutValue}
               min={0}
               onWheel={(event) => event.currentTarget.blur()}
-              onChange={(event) => {
+              onChange={(event) =>
+              {
                 setPrevoutValue(Number(event.target.value) || 0);
                 setClaimErr("");
               }}
@@ -676,7 +785,8 @@ function ReceiverInner() {
               className="w-full rounded border px-3 py-2 font-mono"
               rows={2}
               value={prevoutScriptHex}
-              onChange={(event) => {
+              onChange={(event) =>
+              {
                 setPrevoutScriptHex(event.target.value.trim());
                 setClaimErr("");
               }}
@@ -700,26 +810,45 @@ function ReceiverInner() {
               value={feeRate}
               min={1}
               onWheel={(event) => event.currentTarget.blur()}
-              onKeyDown={(event) => {
+              onKeyDown={(event) =>
+              {
                 if (["-", "e", "E", "+"].includes(event.key)) event.preventDefault();
               }}
-              onChange={(event) => {
+              onChange={(event) =>
+              {
                 setFeeRate(Number(event.target.value) || 1);
                 setClaimErr("");
               }}
             />
           </label>
         </div>
+        {/* Expiry Warning */}
+        {isExpired && (
+          <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-red-700 space-y-1">
+            <div className="font-medium">⚠️ This claim bundle has expired</div>
+            <div className="text-sm">
+              Current block height ({currentHeight?.toLocaleString()}) has reached or exceeded the expiry height ({claimData?.expires_at?.toLocaleString()}).
+              Only the sender can now reclaim these funds via the refund path.
+            </div>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <button
             onClick={buildAndSign}
-            className="px-3 py-2 rounded bg-emerald-600 text-white"
-            disabled={building}
+            className={`px-3 py-2 rounded text-white ${isExpired ? "bg-zinc-400 cursor-not-allowed" : "bg-emerald-600"}`}
+            disabled={building || isExpired}
+            title={isExpired ? "Cannot claim after expiry" : undefined}
           >
-            {building ? "Signing..." : "Build & Sign Claim"}
+            {building ? "Signing..." : isExpired ? "Expired - Cannot Claim" : "Build & Sign Claim"}
           </button>
           {!!resultMsg && <div className="text-sm text-emerald-600">{resultMsg}</div>}
         </div>
+        {currentHeight !== null && claimData?.expires_at && !isExpired && (
+          <div className="text-xs text-zinc-500">
+            Current block: {currentHeight.toLocaleString()} · Expires at block: {claimData.expires_at.toLocaleString()} ·
+            {claimData.expires_at - currentHeight} blocks remaining
+          </div>
+        )}
         {psbtBase64 && (
           <div className="text-xs text-zinc-500">
             PSBT (base64):
@@ -752,7 +881,8 @@ function ReceiverInner() {
   );
 }
 
-export default function ReceiverPage() {
+export default function ReceiverPage()
+{
   return (
     <Suspense fallback={<div>Loading...</div>}>
       <ReceiverInner />
@@ -760,7 +890,8 @@ export default function ReceiverPage() {
   );
 }
 
-async function broadcastRawTransaction(rawHex, endpoint, fallbackTxid, networkKey) {
+async function broadcastRawTransaction(rawHex, endpoint, fallbackTxid, networkKey)
+{
   const normalizedNetwork = normalizeNetworkKey(networkKey);
   const payload = {
     hex: rawHex,
@@ -773,22 +904,27 @@ async function broadcastRawTransaction(rawHex, endpoint, fallbackTxid, networkKe
     body: JSON.stringify(payload),
   });
   let json;
-  try {
+  try
+  {
     json = await resp.json();
-  } catch {
+  } catch
+  {
     throw new Error("Broadcast failed: invalid response from endpoint");
   }
-  if (json?.ok && json?.txid) {
+  if (json?.ok && json?.txid)
+  {
     return { txid: json.txid, alreadyKnown: false };
   }
   const errorText = String(json?.error || `Broadcast failed (status ${json?.status || resp.status})`);
-  if (looksLikeAlreadyBroadcast(errorText)) {
+  if (looksLikeAlreadyBroadcast(errorText))
+  {
     return { txid: fallbackTxid, alreadyKnown: true };
   }
   throw new Error(errorText);
 }
 
-function looksLikeAlreadyBroadcast(message) {
+function looksLikeAlreadyBroadcast(message)
+{
   const lower = String(message || "").toLowerCase();
   return (
     lower.includes("already in the mempool") ||
@@ -798,8 +934,10 @@ function looksLikeAlreadyBroadcast(message) {
   );
 }
 
-async function syncTaprootBalance(wallet, preferredAddress) {
-  try {
+async function syncTaprootBalance(wallet, preferredAddress)
+{
+  try
+  {
     if (!wallet?.id) return;
     const networkKey = normalizeNetworkKey(wallet?.network || "testnet4");
     const addressList = Array.isArray(wallet?.taprootAddresses)
@@ -816,8 +954,10 @@ async function syncTaprootBalance(wallet, preferredAddress) {
     let totalConfirmed = 0;
     let totalPending = 0;
     const queried = [];
-    for (const address of uniqueAddresses) {
-      try {
+    for (const address of uniqueAddresses)
+    {
+      try
+      {
         const params = new URLSearchParams({
           address,
           network: networkKey,
@@ -840,7 +980,8 @@ async function syncTaprootBalance(wallet, preferredAddress) {
         totalConfirmed += confirmed;
         totalPending += pending;
         queried.push(address);
-      } catch (error) {
+      } catch (error)
+      {
         console.warn("taproot balance sub-sync failed", address, error);
       }
     }
@@ -852,12 +993,14 @@ async function syncTaprootBalance(wallet, preferredAddress) {
       "sync",
       { pendingSats: totalPending },
     );
-  } catch (error) {
+  } catch (error)
+  {
     console.warn("auto taproot balance sync failed", error);
   }
 }
 
-function normalizeNetworkKey(networkKey) {
+function normalizeNetworkKey(networkKey)
+{
   const key = String(networkKey || "").toLowerCase();
   if (key === "mainnet") return "mainnet";
   if (key === "testnet") return "testnet";
@@ -866,16 +1009,19 @@ function normalizeNetworkKey(networkKey) {
   return "testnet4";
 }
 
-function defaultBroadcastEndpoint(networkKey) {
+function defaultBroadcastEndpoint(networkKey)
+{
   const key = normalizeNetworkKey(networkKey);
   return BROADCAST_ENDPOINT_DEFAULTS[key] || BROADCAST_ENDPOINT_DEFAULTS.testnet4;
 }
 
-function findWalletByAddress(walletsList, address) {
+function findWalletByAddress(walletsList, address)
+{
   if (!Array.isArray(walletsList) || !address) return null;
   const target = address.trim().toLowerCase();
   if (!target) return null;
-  for (const wallet of walletsList) {
+  for (const wallet of walletsList)
+  {
     if (!wallet) continue;
     const known = [
       wallet.p2tr,
@@ -883,41 +1029,49 @@ function findWalletByAddress(walletsList, address) {
     ]
       .map((addr) => (typeof addr === "string" ? addr.trim().toLowerCase() : ""))
       .filter(Boolean);
-    if (known.includes(target)) {
+    if (known.includes(target))
+    {
       return wallet;
     }
   }
   return null;
 }
 
-function formatAddressLabel(address = "") {
+function formatAddressLabel(address = "")
+{
   const trimmed = address.trim();
   if (trimmed.length <= 18) return trimmed;
   return `${trimmed.slice(0, 10)}…${trimmed.slice(-6)}`;
 }
 
-function toUint8Array(x) {
+function toUint8Array(x)
+{
   if (x instanceof Uint8Array) return x;
   if (Array.isArray(x)) return Uint8Array.from(x);
-  if (x && typeof x === "object") {
+  if (x && typeof x === "object")
+  {
     if (x.type === "Buffer" && Array.isArray(x.data)) return Uint8Array.from(x.data);
-    if (x.buffer instanceof ArrayBuffer && typeof x.byteLength === "number") {
+    if (x.buffer instanceof ArrayBuffer && typeof x.byteLength === "number")
+    {
       return new Uint8Array(x.buffer, x.byteOffset || 0, x.byteLength);
     }
   }
   return new Uint8Array();
 }
 
-function parseMaybeHex(value) {
+function parseMaybeHex(value)
+{
   if (!value) return null;
   const clean = value.trim().replace(/^0x/i, "");
-  if (clean.length % 2 === 0 && /^[0-9a-fA-F]+$/.test(clean)) {
+  if (clean.length % 2 === 0 && /^[0-9a-fA-F]+$/.test(clean))
+  {
     return Buffer.from(clean, "hex");
   }
   return null;
 }
 
-function bufferToHex(value) {
+function bufferToHex(value)
+{
   if (!value) return "";
   if (typeof value === "string") return value;
   if (value instanceof Uint8Array) return Buffer.from(value).toString("hex");
@@ -926,13 +1080,15 @@ function bufferToHex(value) {
   return "";
 }
 
-function getPreimageBytes(input) {
+function getPreimageBytes(input)
+{
   const hex = parseMaybeHex(input);
   if (hex) return hex;
   return Buffer.from(input || "", "utf8");
 }
 
-function getPrivateKeyFromWallet(wallet, network) {
+function getPrivateKeyFromWallet(wallet, network)
+{
   const ECPair = ECPairFactory(ecc);
   const wif = (wallet.wif || "").trim();
   if (!wif) throw new Error("Wallet missing WIF");
@@ -941,11 +1097,13 @@ function getPrivateKeyFromWallet(wallet, network) {
   return Buffer.from(kp.privateKey);
 }
 
-function resolveClaimSigningKey({ selectedWallet, claimPubKeyHex, network }) {
+function resolveClaimSigningKey({ selectedWallet, claimPubKeyHex, network })
+{
   const normalizedClaimPub = (claimPubKeyHex || "").trim().toLowerCase();
   const walletKey = getPrivateKeyFromWallet(selectedWallet, network);
   const walletXOnly = toXOnlyHex(walletKey);
-  if (!normalizedClaimPub || walletXOnly === normalizedClaimPub) {
+  if (!normalizedClaimPub || walletXOnly === normalizedClaimPub)
+  {
     return walletKey;
   }
   throw new Error(
@@ -953,26 +1111,31 @@ function resolveClaimSigningKey({ selectedWallet, claimPubKeyHex, network }) {
   );
 }
 
-function toXOnlyHex(privateKeyBuffer) {
+function toXOnlyHex(privateKeyBuffer)
+{
   if (!privateKeyBuffer) return "";
   const publicKey = ecc.pointFromScalar(privateKeyBuffer, true);
   if (!publicKey) return "";
   return Buffer.from(publicKey.slice(1, 33)).toString("hex").toLowerCase();
 }
 
-function isTaprootAddress(address = "") {
+function isTaprootAddress(address = "")
+{
   const lowered = address.trim().toLowerCase();
   return lowered.startsWith("bc1p") || lowered.startsWith("tb1p") || lowered.startsWith("bcrt1p");
 }
 
-function estimateVsize(outputCount = 1) {
+function estimateVsize(outputCount = 1)
+{
   return 140 + outputCount * 43;
 }
 
-function varint(n) {
+function varint(n)
+{
   if (n < 0xfd) return Buffer.from([n]);
   if (n <= 0xffff) return Buffer.from([0xfd, n & 0xff, (n >> 8) & 0xff]);
-  if (n <= 0xffffffff) {
+  if (n <= 0xffffffff)
+  {
     return Buffer.from([
       0xfe,
       n & 0xff,
@@ -996,9 +1159,11 @@ function varint(n) {
   ]);
 }
 
-function witnessStackToScriptWitness(witness) {
+function witnessStackToScriptWitness(witness)
+{
   const parts = [varint(witness.length)];
-  for (const item of witness) {
+  for (const item of witness)
+  {
     const buf = Buffer.isBuffer(item) ? item : Buffer.from(item);
     parts.push(varint(buf.length));
     parts.push(buf);
@@ -1006,7 +1171,8 @@ function witnessStackToScriptWitness(witness) {
   const total = parts.reduce((sum, chunk) => sum + chunk.length, 0);
   const out = new Uint8Array(total);
   let offset = 0;
-  for (const chunk of parts) {
+  for (const chunk of parts)
+  {
     out.set(chunk, offset);
     offset += chunk.length;
   }
