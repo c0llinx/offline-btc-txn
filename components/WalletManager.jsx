@@ -53,6 +53,7 @@ export default function WalletManager()
   const [networkKey, setNetworkKey] = useState("testnet4");
   const [toast, setToast] = useState(null);
   const [refreshingId, setRefreshingId] = useState(null);
+  const [revealedWalletIds, setRevealedWalletIds] = useState(() => new Set());
 
   function refreshFromStorage()
   {
@@ -191,6 +192,22 @@ export default function WalletManager()
     const updated = markWalletNote(id, next);
     setWallets(updated);
     showToast("Wallet note updated.");
+  }
+
+  function toggleWif(walletId)
+  {
+    setRevealedWalletIds((current) =>
+    {
+      const next = new Set(current);
+      if (next.has(walletId))
+      {
+        next.delete(walletId);
+      } else
+      {
+        next.add(walletId);
+      }
+      return next;
+    });
   }
 
   function handleRecord(walletId, direction)
@@ -340,10 +357,9 @@ export default function WalletManager()
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-200 dark:bg-zinc-800 text-xs uppercase tracking-widest">
           Wallets
         </div>
-        <h1 className="text-3xl font-semibold">Saved Wallets</h1>
+        <h1 className="text-3xl font-semibold">Wallets</h1>
         <p className="text-zinc-500">
-          Create or import signer wallets. They are kept locally in your browser storage so you can re-use
-          keys across cold, signer, and receiver flows.
+          Generate or import local Taproot wallets, set the active wallet, and refresh balances.
         </p>
       </header>
 
@@ -377,7 +393,7 @@ export default function WalletManager()
           </button>
         </div>
         <div className="text-xs text-zinc-500">
-          Data stays on this device. Export by copying WIF/public keys. Clear via your browser storage tools.
+          Data stays on this device. Export intentionally by copying WIF or public keys.
         </div>
       </section>
 
@@ -390,6 +406,7 @@ export default function WalletManager()
           {sortedWallets.map((wallet) =>
           {
             const isActive = wallet.id === activeId;
+            const wifVisible = revealedWalletIds.has(wallet.id);
             return (
               <article
                 key={wallet.id}
@@ -486,14 +503,24 @@ export default function WalletManager()
                   <div>
                     <dt className="text-zinc-500">WIF</dt>
                     <dd className="font-mono break-all text-xs bg-zinc-100 dark:bg-zinc-800 rounded p-2 mt-1">
-                      {wallet.wif}
+                      {wifVisible ? wallet.wif : "Hidden until revealed"}
                     </dd>
-                    <button
-                      className="mt-2 text-xs text-blue-600 hover:underline"
-                      onClick={() => handleCopy(wallet.wif, "WIF")}
-                    >
-                      Copy WIF
-                    </button>
+                    <div className="mt-2 flex gap-3 text-xs">
+                      <button
+                        className="text-amber-600 hover:underline"
+                        onClick={() => toggleWif(wallet.id)}
+                      >
+                        {wifVisible ? "Hide WIF" : "Reveal WIF"}
+                      </button>
+                      {wifVisible && (
+                        <button
+                          className="text-blue-600 hover:underline"
+                          onClick={() => handleCopy(wallet.wif, "WIF")}
+                        >
+                          Copy WIF
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div>
                     <dt className="text-zinc-500">Public Key (compressed)</dt>

@@ -79,7 +79,7 @@ export default function CameraScanner({ onResult }) {
   }
 
   if (!supported) {
-    return <div className="text-xs text-zinc-500">Camera scanning unavailable on this device.</div>;
+    return <div className="text-xs text-[#8B949E]">Camera scanning unavailable on this device.</div>;
   }
 
   return (
@@ -88,16 +88,16 @@ export default function CameraScanner({ onResult }) {
         <button
           type="button"
           onClick={scanning ? stopScan : startScan}
-          className="px-3 py-2 rounded bg-zinc-800 text-white"
+          className="rounded-lg bg-[#F7931A] px-3 py-2 text-sm font-bold text-white hover:bg-[#E8850F]"
         >
           {scanning ? "Stop Scan" : "Scan QR"}
         </button>
       </div>
-      {error && <div className="text-xs text-red-500">{error}</div>}
+      {error && <div className="text-xs text-[#F85149]">{error}</div>}
       {scanning && (
         <video
           ref={videoRef}
-          className="w-full rounded border"
+          className="w-full rounded-xl border border-[#30363D] bg-[#0D1117]"
           playsInline
           muted
         />

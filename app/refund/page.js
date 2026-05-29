@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect, useCallback, Suspense } from "react";
+import Link from "next/link";
 import * as bitcoin from "bitcoinjs-lib";
 import * as ecc from "@bitcoinerlab/secp256k1";
 import { ECPairFactory } from "ecpair";
@@ -19,11 +20,11 @@ bitcoin.initEccLib(ecc);
 const POLL_INTERVAL_MS = 30000; // 30 seconds
 
 const STATUS_COLORS = {
-  [TXN_STATUS.PENDING]: "bg-yellow-100 text-yellow-800",
-  [TXN_STATUS.CLAIMED]: "bg-blue-100 text-blue-800",
-  [TXN_STATUS.REFUNDABLE]: "bg-amber-100 text-amber-800",
-  [TXN_STATUS.REFUNDED]: "bg-green-100 text-green-800",
-  [TXN_STATUS.CANCELLED]: "bg-zinc-100 text-zinc-600",
+  [TXN_STATUS.PENDING]: "bg-[#D29922]/15 text-[#D29922]",
+  [TXN_STATUS.CLAIMED]: "bg-[#3FB950]/15 text-[#3FB950]",
+  [TXN_STATUS.REFUNDABLE]: "bg-[#58A6FF]/15 text-[#58A6FF]",
+  [TXN_STATUS.REFUNDED]: "bg-[#8B949E]/15 text-[#8B949E]",
+  [TXN_STATUS.CANCELLED]: "bg-[#F85149]/15 text-[#F85149]",
 };
 
 const STATUS_LABELS = {
@@ -431,12 +432,20 @@ function RefundContent()
   return (
     <main className="space-y-6">
       <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-600 text-white">
-        REFUND
+        Activity
       </div>
-      <h1 className="text-2xl font-semibold">Refund Tracker</h1>
+      <h1 className="text-2xl font-semibold">Activity</h1>
       <p className="text-zinc-500">
-        Monitor initiated transactions and trigger refunds when the expiry height is reached and funds haven't been claimed.
+        Monitor initiated transactions, watch expiry height, and trigger refunds when funds are unclaimed.
       </p>
+      <div>
+        <Link
+          href="/watch"
+          className="inline-flex items-center rounded-lg border border-[#30363D] bg-[#21262D] px-3 py-2 text-sm font-semibold text-[#F7931A] hover:border-[#F7931A]"
+        >
+          Broadcast TX
+        </Link>
+      </div>
 
       {/* Status Bar */}
       <section className="rounded-lg border p-4 bg-zinc-50 space-y-2">
@@ -490,7 +499,7 @@ function RefundContent()
             }}
             className="px-3 py-2 rounded bg-red-100 hover:bg-red-200 text-red-700 text-sm"
           >
-            Clear All
+            Clear History
           </button>
         </div>
         {lastPollTime && (
@@ -515,11 +524,11 @@ function RefundContent()
       {/* Transaction List */}
       <section className="rounded-lg border overflow-hidden">
         <div className="bg-zinc-100 px-4 py-2 font-medium text-sm border-b">
-          Tracked Transactions ({filteredTxns.length})
+          Transactions ({filteredTxns.length})
         </div>
         {sortedTxns.length === 0 ? (
           <div className="p-8 text-center text-zinc-500">
-            No transactions tracked yet. Create a claim bundle on the Cold page to start tracking.
+            No transactions yet. Send a payment to see it tracked here.
           </div>
         ) : (
           <div className="divide-y">

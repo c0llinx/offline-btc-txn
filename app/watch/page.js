@@ -47,9 +47,9 @@ export default function Watch() {
 
   return (
     <main className="space-y-6">
-      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-600 text-white">WATCH‑ONLY</div>
-      <h1 className="text-2xl font-semibold">Watch‑Only (Online Messenger)</h1>
-      <p className="text-zinc-500">Broadcast signed transactions to Testnet4. Paste raw tx hex below.</p>
+      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-600 text-white">Broadcast</div>
+      <h1 className="text-2xl font-semibold">Watch Mode</h1>
+      <p className="text-zinc-500">Broadcast raw transactions without exposing wallet keys.</p>
 
       <section className="rounded-lg border p-4 space-y-3">
         <label className="space-y-1 block">
@@ -75,7 +75,7 @@ export default function Watch() {
           <textarea className="w-full rounded border px-3 py-2 font-mono min-h-[140px]" value={hex} onChange={e => setHex(e.target.value)} />
         </label>
         <div className="flex items-center gap-2">
-          <button onClick={handleBroadcast} className="px-3 py-2 rounded bg-emerald-600 text-white" disabled={!hex.trim()}>Broadcast</button>
+          <button onClick={handleBroadcast} className="px-3 py-2 rounded bg-blue-600 text-white" disabled={!hex.trim()}>Broadcast</button>
           {status && <div className="text-sm text-zinc-500">Status: {status}</div>}
         </div>
         {error && <div className="text-sm text-red-600">{error}</div>}

@@ -3,5 +3,320 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: light dark;
+  color-scheme: dark;
+  --ob-primary: #f7931a;
+  --ob-primary-dark: #e8850f;
+  --ob-background: #0d1117;
+  --ob-surface: #161b22;
+  --ob-surface-light: #21262d;
+  --ob-border: #30363d;
+  --ob-text: #f0f6fc;
+  --ob-secondary: #8b949e;
+  --ob-muted: #484f58;
+  --ob-success: #3fb950;
+  --ob-warning: #d29922;
+  --ob-error: #f85149;
+  --ob-info: #58a6ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+  background: var(--ob-background);
+}
+
+body {
+  margin: 0;
+  color: var(--ob-text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+::selection {
+  background: rgba(247, 147, 26, 0.35);
+}
+
+.app-content main {
+  width: 100%;
+}
+
+.app-content main > h1,
+.app-content header h1 {
+  color: var(--ob-text);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.app-content main > p,
+.app-content header p {
+  max-width: 48rem;
+  color: var(--ob-secondary);
+  font-size: 14px;
+}
+
+.app-content main > .inline-flex:first-child {
+  border: 1px solid var(--ob-border) !important;
+  background: var(--ob-surface-light) !important;
+  color: var(--ob-secondary) !important;
+  border-radius: 999px !important;
+  font-size: 11px !important;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.app-content main > section,
+.app-content article,
+.app-content .rounded-xl.border,
+.app-content .rounded-lg.border {
+  border-color: var(--ob-border) !important;
+  background-color: var(--ob-surface) !important;
+  box-shadow: none !important;
+}
+
+.app-content main > section,
+.app-content article {
+  border-radius: 12px !important;
+}
+
+.app-content .rounded-2xl,
+.app-content .rounded-xl {
+  border-radius: 12px !important;
+}
+
+.app-content .rounded-lg,
+.app-content .rounded-md {
+  border-radius: 8px !important;
+}
+
+.app-content input:not([type="checkbox"]),
+.app-content select,
+.app-content textarea {
+  min-height: 44px;
+  border: 1px solid var(--ob-border) !important;
+  background-color: var(--ob-surface-light) !important;
+  color: var(--ob-text) !important;
+  outline: none;
+}
+
+.app-content textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.app-content input[readonly],
+.app-content textarea[readonly] {
+  background-color: var(--ob-surface) !important;
+  color: var(--ob-secondary) !important;
+}
+
+.app-content input::placeholder,
+.app-content textarea::placeholder {
+  color: var(--ob-muted);
+}
+
+.app-content input:focus,
+.app-content select:focus,
+.app-content textarea:focus {
+  border-color: var(--ob-primary) !important;
+  box-shadow: 0 0 0 3px rgba(247, 147, 26, 0.14);
+}
+
+.app-content select option {
+  background: var(--ob-surface-light);
+  color: var(--ob-text);
+}
+
+.app-content .border,
+.app-content .border-b,
+.app-content .border-t,
+.app-content .divide-y > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--ob-border) !important;
+}
+
+.app-content .bg-white,
+.app-content .bg-zinc-50,
+.app-content .bg-zinc-100,
+.app-content .bg-zinc-200,
+.app-content .bg-gray-100 {
+  background-color: var(--ob-surface-light) !important;
+}
+
+.app-content .bg-red-50,
+.app-content .bg-red-100 {
+  background-color: rgba(248, 81, 73, 0.14) !important;
+}
+
+.app-content .bg-blue-600 {
+  background-color: var(--ob-primary) !important;
+}
+
+.app-content .bg-emerald-600,
+.app-content .bg-green-600 {
+  background-color: var(--ob-success) !important;
+}
+
+.app-content .bg-amber-600 {
+  background-color: var(--ob-warning) !important;
+}
+
+.app-content .bg-green-50,
+.app-content .bg-green-100 {
+  background-color: rgba(63, 185, 80, 0.14) !important;
+}
+
+.app-content .bg-yellow-100,
+.app-content .bg-amber-100 {
+  background-color: rgba(210, 153, 34, 0.14) !important;
+}
+
+.app-content .border-blue-500 {
+  border-color: var(--ob-primary) !important;
+}
+
+.app-content .border-red-300,
+.app-content .border-red-400 {
+  border-color: rgba(248, 81, 73, 0.45) !important;
+}
+
+.app-content .border-green-300 {
+  border-color: rgba(63, 185, 80, 0.45) !important;
+}
+
+.app-content button.bg-blue-600,
+.app-content a.bg-blue-600 {
+  border: 0 !important;
+  background-color: var(--ob-primary) !important;
+  color: #ffffff !important;
+  font-weight: 700;
+}
+
+.app-content button.bg-blue-600:hover,
+.app-content a.bg-blue-600:hover {
+  background-color: var(--ob-primary-dark) !important;
+}
+
+.app-content button.bg-emerald-600,
+.app-content button.bg-green-600 {
+  border: 0 !important;
+  background-color: var(--ob-success) !important;
+  color: #ffffff !important;
+  font-weight: 700;
+}
+
+.app-content button.bg-amber-600 {
+  border: 0 !important;
+  background-color: var(--ob-warning) !important;
+  color: #ffffff !important;
+  font-weight: 700;
+}
+
+.app-content button.bg-red-100,
+.app-content button.bg-red-600 {
+  border: 0 !important;
+  background-color: rgba(248, 81, 73, 0.16) !important;
+  color: var(--ob-error) !important;
+}
+
+.app-content button.border,
+.app-content button.bg-zinc-800,
+.app-content button.bg-zinc-200 {
+  border-color: var(--ob-border) !important;
+  background-color: var(--ob-surface-light) !important;
+  color: var(--ob-text) !important;
+}
+
+.app-content button.border:hover,
+.app-content button.bg-zinc-800:hover,
+.app-content button.bg-zinc-200:hover {
+  border-color: var(--ob-primary) !important;
+  color: var(--ob-primary) !important;
+}
+
+.app-content button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.app-content .text-zinc-400,
+.app-content .text-zinc-500,
+.app-content .text-zinc-600 {
+  color: var(--ob-secondary) !important;
+}
+
+.app-content .text-zinc-700,
+.app-content .text-zinc-800,
+.app-content .text-zinc-900 {
+  color: var(--ob-text) !important;
+}
+
+.app-content .text-blue-600,
+.app-content .text-blue-700,
+.app-content .text-blue-800 {
+  color: var(--ob-info) !important;
+}
+
+.app-content .text-emerald-600,
+.app-content .text-green-600,
+.app-content .text-green-700,
+.app-content .text-green-800 {
+  color: var(--ob-success) !important;
+}
+
+.app-content .text-red-500,
+.app-content .text-red-600,
+.app-content .text-red-700,
+.app-content .text-red-800 {
+  color: var(--ob-error) !important;
+}
+
+.app-content .text-amber-600,
+.app-content .text-yellow-800 {
+  color: var(--ob-warning) !important;
+}
+
+.app-content .font-mono,
+.app-content code {
+  color: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  overflow-wrap: anywhere;
+}
+
+.app-content dt,
+.app-content label > div:first-child {
+  color: var(--ob-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.app-content img[alt*="QR"] {
+  border-color: var(--ob-border) !important;
+  background-color: #ffffff !important;
+  padding: 12px;
 }

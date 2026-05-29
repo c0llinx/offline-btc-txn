@@ -465,11 +465,11 @@ export default function Cold()
   return (
     <main className="space-y-6">
       <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-600 text-white">
-        COLD
+        Send
       </div>
-      <h1 className="text-2xl font-semibold">Cold Mode (Offline Signer)</h1>
+      <h1 className="text-2xl font-semibold">Payment Details</h1>
       <p className="text-zinc-500">
-        Active wallet keys are applied automatically. Only the message, expiry height, and commitment amount need to be provided here.
+        Select a funding wallet, enter the amount and message, then generate a claim bundle for the receiver.
       </p>
 
       <div className="rounded-xl border p-4">
@@ -479,14 +479,14 @@ export default function Cold()
       </div>
 
       <section className="rounded-xl border p-4 space-y-4">
-        <h2 className="font-semibold">Offline Funding Setup</h2>
+        <h2 className="font-semibold">Funding Setup</h2>
         <p className="text-xs text-zinc-500">
           This cold generator prepares a third-party Taproot commitment using only the selected funding wallet. Share the resulting
           claim bundle with your counterparty, who will add their wallet details when redeeming on the receiver device.
         </p>
         <div className="space-y-4">
           <div className="space-y-2 rounded-lg border bg-zinc-50 p-3">
-            <h3 className="font-medium text-sm">Funding wallet (offline)</h3>
+            <h3 className="font-medium text-sm">Funding Wallet</h3>
             <p className="text-xs text-zinc-500">
               Provides sats for the claim bundle and retains the refund path. Must hold spendable Taproot UTXOs.
             </p>
@@ -639,7 +639,7 @@ export default function Cold()
           onClick={handleGenerate}
           disabled={!fundingWallet}
         >
-          Create Claim Bundle
+          Generate Commitment
         </button>
         {!!genError && <div className="text-sm text-red-600">{genError}</div>}
         <div className="text-xs text-zinc-500">
@@ -660,7 +660,7 @@ export default function Cold()
       {
         claimBundleUR && (
           <section className="rounded-xl border p-4 space-y-3">
-            <h2 className="font-semibold">Claim Bundle UR</h2>
+            <h2 className="font-semibold">Claim Bundle QR</h2>
             <div className="grid md:grid-cols-2 gap-3">
               <div className="space-y-2">
                 <textarea

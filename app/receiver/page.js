@@ -579,11 +579,11 @@ function ReceiverInner()
   return (
     <main className="space-y-6">
       <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-600 text-white">
-        RECEIVER
+        Receive
       </div>
-      <h1 className="text-2xl font-semibold">Claim Funds</h1>
+      <h1 className="text-2xl font-semibold">Receive Payment</h1>
       <p className="text-zinc-500">
-        Paste the Claim Bundle UR, provide your preimage and wallet, then sign the claim transaction to sweep the funds.
+        Scan or paste a claim bundle from the sender, verify the details, then claim funds to your wallet.
       </p>
 
       <section className="rounded-lg border p-4 space-y-3">
@@ -603,9 +603,9 @@ function ReceiverInner()
         <div className="flex items-center gap-2">
           <button
             onClick={handleDecodeBundle}
-            className="px-3 py-2 rounded bg-blue-600 text-white"
+            className="px-3 py-2 rounded bg-emerald-600 text-white"
           >
-            Decode Bundle
+            Parse Bundle
           </button>
           {!!broadcastMsg && !claimErr && (
             <div className="text-sm text-emerald-600">{broadcastMsg}</div>
@@ -637,7 +637,7 @@ function ReceiverInner()
       </section>
 
       <section className="rounded-lg border p-4 space-y-3">
-        <h2 className="font-medium">Wallet & Preimage</h2>
+        <h2 className="font-medium">Claim Configuration</h2>
         <div className="grid md:grid-cols-2 gap-3">
           <label className="space-y-1">
             <div className="text-sm text-zinc-500">Wallet</div>
@@ -839,7 +839,7 @@ function ReceiverInner()
             disabled={building || isExpired}
             title={isExpired ? "Cannot claim after expiry" : undefined}
           >
-            {building ? "Signing..." : isExpired ? "Expired - Cannot Claim" : "Build & Sign Claim"}
+            {building ? "Claiming..." : isExpired ? "Expired - Cannot Claim" : "Claim Funds"}
           </button>
           {!!resultMsg && <div className="text-sm text-emerald-600">{resultMsg}</div>}
         </div>
